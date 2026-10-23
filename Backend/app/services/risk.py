@@ -151,7 +151,7 @@ class RiskService:
 
         total_rate = baseline_rate + triggered_rate
         expected_events = round(total_rate * window_days, 2)
-        relative_to_baseline = round(total_rate / effective_baseline, 1)
+        relative_to_baseline = round(total_rate / effective_baseline, 1) if total_rate > 0 else 1.0
         risk_level = classify_risk_level(relative_to_baseline)
 
         # Compute risk score (0.0 to 1.0 scale)

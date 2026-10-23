@@ -117,4 +117,6 @@ class CatalogService:
             properties.get("status"),
             "usgs",
             fetched_at,
+            note=None,
+            place=properties.get("place"),
         )
