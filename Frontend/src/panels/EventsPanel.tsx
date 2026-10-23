@@ -184,7 +184,9 @@ export default function EventsPanel({
                     <div className="event-meta-line font-mono">
                       <span className="meta-time">{formatRelativeTime(event.time)}</span>
                       {event.depth_km !== undefined && (
-                        <span className="meta-depth">Depth: {event.depth_km} km</span>
+                        <span className="meta-depth">
+                          Depth: {typeof event.depth_km === "number" ? event.depth_km.toFixed(1) : event.depth_km} km
+                        </span>
                       )}
                       <span className={`source-pill ${event.source === "user_report" ? "pill-user" : "pill-usgs"}`}>
                         {event.source === "user_report" ? "Local" : "USGS"}
