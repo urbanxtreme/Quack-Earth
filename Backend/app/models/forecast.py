@@ -24,6 +24,8 @@ class Forecast:
     expected_event_count: float
     probability_at_least_one: float
     baseline_rate_per_day: float
+    baseline_event_count: int
+    recent_qualifying_event_count: int
     relative_activity_score: float
     data_as_of: str
     model: str
@@ -38,6 +40,8 @@ class Forecast:
             "expected_event_count": self.expected_event_count,
             "probability_at_least_one": self.probability_at_least_one,
             "baseline_rate_per_day": self.baseline_rate_per_day,
+            "baseline_event_count": self.baseline_event_count,
+            "recent_qualifying_event_count": self.recent_qualifying_event_count,
             "relative_activity_score": self.relative_activity_score,
             "data_as_of": self.data_as_of,
             "model": self.model,

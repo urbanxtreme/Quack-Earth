@@ -9,6 +9,67 @@ from .common import error, parse_iso
 events_bp = Blueprint("events", __name__)
 
 
+@events_bp.get("/map/events")
+def map_events():
+    try:
+        min_lat = float(request.args["min_lat"])
+        max_lat = float(request.args["max_lat"])
+        min_lon = float(request.args["min_lon"])
+        max_lon = float(request.args["max_lon"])
+        if not (-90 <= min_lat < max_lat <= 90 and -180 <= min_lon < max_lon <= 180):
+            return error("Map bounds are out of range or not ordered", 422)
+
+        hours = int(request.args.get("hours", 168))
+        min_magnitude = float(request.args.get("min_magnitude", 0))
+        limit = int(request.args.get("limit", 1000))
+        if hours <= 0 or hours > 366 * 24:
+            return error("hours must be between 1 and 8784", 422)
+        if not -1 <= min_magnitude <= 10:
+            return error("min_magnitude must be between -1 and 10", 422)
+        if not 0 < limit <= 5000:
+            return error("limit must be between 1 and 5000", 422)
+
+        now = datetime.now(timezone.utc)
+        records = current_app.extensions["event_repository"].list_events(
+            start=now - timedelta(hours=hours),
+            end=now + timedelta(hours=24),
+            min_magnitude=min_magnitude,
+            limit=5000,
+        )
+        records = [
+            event for event in records
+            if min_lat <= event.latitude <= max_lat
+            and min_lon <= event.longitude <= max_lon
+        ][:limit]
+        metadata = current_app.extensions["event_repository"].metadata()
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "id": event.event_id,
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [event.longitude, event.latitude],
+                    },
+                    "properties": event.to_dict(),
+                }
+                for event in records
+            ],
+            "count": len(records),
+            "source": metadata.get("source", "USGS ComCat"),
+            "data_as_of": metadata.get("last_successful_sync"),
+            "bounds": {
+                "min_lat": min_lat,
+                "max_lat": max_lat,
+                "min_lon": min_lon,
+                "max_lon": max_lon,
+            },
+        }, 200
+    except (KeyError, TypeError, ValueError) as exc:
+        return error(f"Invalid map query: {exc}", 400)
+
+
 @events_bp.get("/events")
 def events():
     try:

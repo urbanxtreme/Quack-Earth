@@ -151,6 +151,56 @@ def test_risk_grid_validation(client):
     assert "min boundaries must be less than max boundaries" in res.get_json()["error"]
 
 
+def test_risk_heatmap_returns_geojson_cells(client):
+    response = client.get(
+        "/api/v1/risk/heatmap?min_lat=33.5&max_lat=34.5&min_lon=-119&max_lon=-117.5&resolution=0.5"
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["type"] == "FeatureCollection"
+    assert data["count"] == len(data["features"])
+    feature = data["features"][0]
+    assert feature["geometry"]["type"] == "Polygon"
+    assert len(feature["geometry"]["coordinates"][0]) == 5
+    assert 0.0 <= feature["properties"]["value"] <= 1.0
+
+
+def test_risk_heatmap_rejects_invalid_window(client):
+    response = client.get(
+        "/api/v1/risk/heatmap?min_lat=33&max_lat=34&min_lon=-119&max_lon=-118&time_window=48h"
+    )
+
+    assert response.status_code == 422
+    assert "time_window" in response.get_json()["error"]
+
+
+def test_map_events_returns_geojson(client):
+    response = client.get(
+        "/api/v1/map/events?min_lat=-90&max_lat=90&min_lon=-180&max_lon=180&hours=8784"
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["type"] == "FeatureCollection"
+    assert data["count"] == len(data["features"])
+    if data["features"]:
+        feature = data["features"][0]
+        assert feature["type"] == "Feature"
+        assert feature["geometry"]["type"] == "Point"
+        assert len(feature["geometry"]["coordinates"]) == 2
+        assert "event_id" in feature["properties"]
+
+
+def test_map_events_rejects_invalid_bounds(client):
+    response = client.get(
+        "/api/v1/map/events?min_lat=13&max_lat=12&min_lon=77&max_lon=78"
+    )
+
+    assert response.status_code == 422
+    assert "not ordered" in response.get_json()["error"]
+
+
 def test_refresh_catalog_offline(client):
     with patch("requests.get", side_effect=requests.ConnectionError("Connection refused")):
         res = client.post("/refresh-catalog", json={"days_back": 7, "min_magnitude": 3.0})

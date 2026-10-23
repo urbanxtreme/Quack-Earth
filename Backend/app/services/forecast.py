@@ -42,7 +42,7 @@ class ForecastService:
         metadata = self.repository.metadata()
         return Forecast(
             target, window_hours, minimum_magnitude, round(expected, 6), round(probability, 6),
-            round(baseline_rate, 6), round(relative, 6),
+            round(baseline_rate, 6), len(relevant), len(contributions), round(relative, 6),
             metadata.get("last_successful_sync"),
             "prototype-aftershock-v1",
             ["Events are modeled as a Poisson process.", "Baseline uses the previous 30 days in the target region.",

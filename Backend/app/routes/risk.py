@@ -5,6 +5,77 @@ from .common import error
 risk_bp = Blueprint("risk", __name__)
 
 
+@risk_bp.get("/risk/heatmap")
+def calculate_heatmap():
+    try:
+        min_lat = float(request.args["min_lat"])
+        max_lat = float(request.args["max_lat"])
+        min_lon = float(request.args["min_lon"])
+        max_lon = float(request.args["max_lon"])
+        resolution = float(request.args.get("resolution", 0.1))
+        min_magnitude = float(request.args.get("min_magnitude", 4.0))
+        time_window = request.args.get("time_window", "24h")
+    except (KeyError, TypeError, ValueError) as exc:
+        return error(f"Invalid heatmap query: {exc}", 400)
+
+    if not (-90 <= min_lat < max_lat <= 90 and -180 <= min_lon < max_lon <= 180):
+        return error("Coordinates out of range or boundaries are not ordered", 422)
+    if resolution <= 0:
+        return error("resolution must be positive", 422)
+    if time_window not in ("24h", "7d"):
+        return error("time_window must be '24h' or '7d'", 422)
+    if not -1 <= min_magnitude <= 10:
+        return error("min_magnitude must be between -1 and 10", 422)
+
+    try:
+        grid = current_app.extensions["risk_service"].calculate_grid(
+            min_lat=min_lat,
+            max_lat=max_lat,
+            min_lon=min_lon,
+            max_lon=max_lon,
+            resolution=resolution,
+            time_window=time_window,
+            min_magnitude=min_magnitude,
+        )
+        features = []
+        half = resolution / 2
+        for cell in grid["grid"]:
+            lat, lon = cell["lat"], cell["lon"]
+            features.append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [max(-180, lon - half), max(-90, lat - half)],
+                        [min(180, lon + half), max(-90, lat - half)],
+                        [min(180, lon + half), min(90, lat + half)],
+                        [max(-180, lon - half), min(90, lat + half)],
+                        [max(-180, lon - half), max(-90, lat - half)],
+                    ]],
+                },
+                "properties": {
+                    **cell,
+                    "value": cell["risk_score"],
+                },
+            })
+        return {
+            "type": "FeatureCollection",
+            "features": features,
+            "count": len(features),
+            "time_window": time_window,
+            "min_magnitude": min_magnitude,
+            "resolution": resolution,
+            "bounds": {
+                "min_lat": min_lat, "max_lat": max_lat,
+                "min_lon": min_lon, "max_lon": max_lon,
+            },
+        }, 200
+    except ValueError as exc:
+        return error(str(exc), 422)
+    except Exception:
+        return error("Risk engine failed", 500)
+
+
 @risk_bp.get("/risk")
 def calculate_risk():
     lat_val = request.args.get("lat")
