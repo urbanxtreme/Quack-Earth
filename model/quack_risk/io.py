@@ -11,6 +11,7 @@ from quack_risk.schema import (
     CATALOG_COLUMNS,
     CATALOG_REQUIRED_COLUMNS,
     CATALOG_SOURCES,
+    GRID_COLUMNS,
     CatalogSchemaError,
     SIGNAL_COLUMNS,
     SIGNAL_REQUIRED_COLUMNS,
@@ -182,6 +183,35 @@ def _parse_times(values: pd.Series) -> pd.Series:
         unit = "ms" if not observed.empty and float(observed.abs().median()) > 1e11 else "s"
         return pd.to_datetime(values, unit=unit, utc=True, errors="coerce")
     return pd.to_datetime(values, utc=True, errors="coerce")
+
+
+def write_risk_grid(frame: pd.DataFrame, csv_path: str | Path) -> tuple[Path, Path]:
+    """Write the frontend grid as CSV and a GeoJSON FeatureCollection of points."""
+    missing = [name for name in GRID_COLUMNS if name not in frame.columns]
+    if missing:
+        joined = ", ".join(missing)
+        raise ValueError(f"Risk grid is missing columns: {joined}.")
+    path = Path(csv_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ordered = frame.loc[:, list(GRID_COLUMNS)].sort_values(["lat", "lon"], kind="mergesort")
+    ordered.to_csv(path, index=False)
+
+    records = json.loads(ordered.to_json(orient="records"))
+    features = []
+    for record in records:
+        latitude = record.pop("lat")
+        longitude = record.pop("lon")
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [longitude, latitude]},
+                "properties": record,
+            }
+        )
+    geojson_path = path.with_suffix(".geojson")
+    payload = {"type": "FeatureCollection", "features": features}
+    geojson_path.write_text(json.dumps(payload), encoding="utf-8")
+    return path, geojson_path
 
 
 def _as_id(value: object) -> str | None:
