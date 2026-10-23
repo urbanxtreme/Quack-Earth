@@ -94,14 +94,14 @@ export default function RiskPanel({
       <div className="risk-target-card">
         <div className="target-icon">📍</div>
         <div className="target-details">
-          <span className="target-name">
+          <div className="target-name">
             {activeLocationName || "Global / Selected Epicenter"}
-          </span>
-          <span className="target-coords font-mono">
+          </div>
+          <div className="target-coords font-mono">
             {selectedCoordinates
               ? `${selectedCoordinates.lat.toFixed(4)}°N, ${selectedCoordinates.lon.toFixed(4)}°E`
               : "Click on map or search place"}
-          </span>
+          </div>
         </div>
       </div>
 
@@ -150,24 +150,24 @@ export default function RiskPanel({
           </div>
         ) : (
           <div className="gauge-wrapper">
-            <svg className="gauge-svg" viewBox="0 0 130 130">
+            <svg className="gauge-svg" viewBox="0 0 140 140">
               <circle
                 className="gauge-bg"
-                cx="65"
-                cy="65"
+                cx="70"
+                cy="70"
                 r="52"
                 strokeWidth="10"
               />
               <circle
                 className={`gauge-progress ${riskCat.colorClass}`}
-                cx="65"
-                cy="65"
+                cx="70"
+                cy="70"
                 r="52"
                 strokeWidth="10"
                 strokeDasharray={strokeDasharray}
                 strokeDashoffset={strokeDashoffset}
                 strokeLinecap="round"
-                transform="rotate(-90 65 65)"
+                transform="rotate(-90 70 70)"
               />
             </svg>
             <div className="gauge-content">
