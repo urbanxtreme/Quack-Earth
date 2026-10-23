@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
@@ -10,7 +11,8 @@ import pytest
 
 from quack_risk import CATALOG_COLUMNS, GRID_COLUMNS, RiskParams, load_catalog, load_signals
 from quack_risk.config import DEMO_AS_OF, DEMO_BOUNDS, PARAM_BOUNDS
-from quack_risk.schema import CatalogSchemaError, GridSpec, SignalSchemaError
+from quack_risk.engine import score_grid
+from quack_risk.schema import PUBLIC_COLUMNS, CatalogSchemaError, GridSpec, SignalSchemaError
 
 FIXTURES = Path(__file__).resolve().parents[1] / "data" / "fixtures"
 VALID_HEADER = "id,time,latitude,longitude,depth_km,magnitude,mag_type,source\n"
@@ -222,3 +224,25 @@ def test_grid_contract_and_default_parameters() -> None:
     assert grid.resolution_deg == 0.2
     with pytest.raises(ValueError):
         GridSpec(41.0, 34.0, 35.0, 41.0)
+
+
+def test_score_grid_signature_and_public_columns_stay_fixed() -> None:
+    assert list(inspect.signature(score_grid).parameters) == [
+        "catalog",
+        "as_of",
+        "bounds",
+        "resolution_deg",
+        "magnitude_threshold",
+        "local_signals",
+        "params",
+        "use_ml_adjustment",
+    ]
+    assert PUBLIC_COLUMNS == (
+        "probability_m5_24h",
+        "probability_m6_24h",
+        "public_zone",
+    )
+    signals = load_signals(FIXTURES / "handoff_signal.json")
+    assert len(signals) == 1
+    assert signals.iloc[0]["signal_type"] == "accelerometer"
+    assert signals.iloc[0]["equivalent_magnitude"] == 4.2

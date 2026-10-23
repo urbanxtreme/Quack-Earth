@@ -1,0 +1,11 @@
+[
+  {
+    "id": "handoff-phone-1",
+    "time": "2023-02-06T12:00:00Z",
+    "latitude": 37.45,
+    "longitude": 37.01,
+    "signal_type": "accelerometer",
+    "confidence": 0.9,
+    "equivalent_magnitude": 4.2
+  }
+]
