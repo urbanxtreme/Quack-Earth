@@ -41,6 +41,13 @@ GRID_COLUMNS: tuple[str, ...] = (
     "risk_level",
 )
 RISK_LEVELS: tuple[str, ...] = ("low", "moderate", "elevated", "high")
+# Written by the scoring script after score_grid. The nine GRID_COLUMNS stay first.
+PUBLIC_COLUMNS: tuple[str, ...] = (
+    "probability_m5_24h",
+    "probability_m6_24h",
+    "public_zone",
+)
+PUBLIC_ZONES: tuple[str, ...] = ("usual", "stay aware", "limit work", "priority")
 
 
 class CatalogSchemaError(ValueError):

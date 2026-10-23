@@ -12,6 +12,7 @@ from quack_risk.schema import (
     CATALOG_REQUIRED_COLUMNS,
     CATALOG_SOURCES,
     GRID_COLUMNS,
+    PUBLIC_COLUMNS,
     CatalogSchemaError,
     SIGNAL_COLUMNS,
     SIGNAL_REQUIRED_COLUMNS,
@@ -193,7 +194,8 @@ def write_risk_grid(frame: pd.DataFrame, csv_path: str | Path) -> tuple[Path, Pa
         raise ValueError(f"Risk grid is missing columns: {joined}.")
     path = Path(csv_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    ordered = frame.loc[:, list(GRID_COLUMNS)].sort_values(["lat", "lon"], kind="mergesort")
+    extra = [name for name in PUBLIC_COLUMNS if name in frame.columns]
+    ordered = frame.loc[:, list(GRID_COLUMNS) + extra].sort_values(["lat", "lon"], kind="mergesort")
     ordered.to_csv(path, index=False)
 
     records = json.loads(ordered.to_json(orient="records"))
