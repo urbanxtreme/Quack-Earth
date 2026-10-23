@@ -8,15 +8,20 @@ Risk Score Scale:
 - Triggered rate lambda_trig is derived from the modified Omori law:
     boost_i = k * 10^(alpha * (M_i - M_c)) / (Delta t_i + c)^p * exp(-d_i / d_0)
 - Relative activity is R = (lambda_0 + lambda_trig) / lambda_0.
-- Normalized risk_score is computed using a logistic response calibrated to hazard cutoffs:
-    risk_score = 1 - 1 / (1 + (R / 3.5)^1.2)
-  where R=1 (baseline) gives ~0.20, R=3 (elevated) gives ~0.45, R=10+ (high) gives 0.75-1.0.
+- Normalized risk_score is computed using a calibrated response bounded in [0.0, 1.0].
+- Hazard risk levels:
+    - low: relative risk < 1.5
+    - moderate: 1.5 <= relative risk < 3.0
+    - elevated: 3.0 <= relative risk < 10.0
+    - high: relative risk >= 10.0
 """
 
 from __future__ import annotations
 
 import math
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import numpy as np
 
@@ -40,8 +45,18 @@ def haversine_vector(lat1: float, lon1: float, lat2_arr: np.ndarray, lon2_arr: n
     r_lon2 = np.radians(lon2_arr)
     dlat = r_lat2 - r_lat1
     dlon = r_lon2 - r_lon1
-    a = np.sin(dlat / 2.0) ** 2 + math.cos(r_lat1) * np.cos(r_lat2) * np.sin(dlon / 2.0) ** 2
+    a = np.sin(dlat / 2.0) ** 2 + math.cos(r_lat1) * math.cos(r_lat2) * np.sin(dlon / 2.0) ** 2
     return 6371.0088 * 2.0 * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
+
+
+def classify_risk_level(relative_risk: float) -> str:
+    if relative_risk < 1.5:
+        return "low"
+    if relative_risk < 3.0:
+        return "moderate"
+    if relative_risk < 10.0:
+        return "elevated"
+    return "high"
 
 
 class RiskService:
@@ -80,6 +95,7 @@ class RiskService:
                         "risk_score": 0.0,
                         "relative_to_baseline": 1.0,
                         "expected_events": 0.0,
+                        "risk_level": "low",
                     }
                 ],
                 "generated_at": now.isoformat().replace("+00:00", "Z"),
@@ -135,7 +151,8 @@ class RiskService:
 
         total_rate = baseline_rate + triggered_rate
         expected_events = round(total_rate * window_days, 2)
-        relative_to_baseline = round(total_rate / effective_baseline, 1)
+        relative_to_baseline = round(total_rate / effective_baseline, 1) if total_rate > 0 else 1.0
+        risk_level = classify_risk_level(relative_to_baseline)
 
         # Compute risk score (0.0 to 1.0 scale)
         if total_rate <= 0:
@@ -157,6 +174,7 @@ class RiskService:
                     "risk_score": risk_score,
                     "relative_to_baseline": relative_to_baseline,
                     "expected_events": expected_events,
+                    "risk_level": risk_level,
                 }
             ],
             "generated_at": now.isoformat().replace("+00:00", "Z"),
@@ -192,7 +210,76 @@ class RiskService:
             if (now - max_event_time).days > 30:
                 ref_time = max_event_time + timedelta(hours=1)
 
-        # Pre-filter events around the grid bounding box with a buffer
+        # Attempt to run via model/quack_risk if available and valid bounds
+        if (max_lon - min_lon) >= resolution and (max_lat - min_lat) >= resolution:
+            try:
+                model_dir = str(Path(__file__).resolve().parents[3] / "model")
+                if model_dir not in sys.path:
+                    sys.path.insert(0, model_dir)
+                import pandas as pd
+                from quack_risk.engine import score_grid
+
+                cat_rows = []
+                for e in all_events:
+                    if e.source != "user_report" and not e.event_id.startswith("local_"):
+                        cat_rows.append({
+                            "id": e.event_id,
+                            "time": e.origin_time.isoformat(),
+                            "latitude": e.latitude,
+                            "longitude": e.longitude,
+                            "depth_km": e.depth_km if e.depth_km is not None else 10.0,
+                            "magnitude": e.magnitude if e.magnitude is not None else 4.0,
+                            "mag_type": e.magnitude_type or "ml",
+                            "source": "usgs",
+                        })
+
+                if cat_rows:
+                    cat_df = pd.DataFrame(cat_rows)
+                    sig_rows = []
+                    for e in all_events:
+                        if e.source == "user_report" or e.event_id.startswith("local_"):
+                            sig_rows.append({
+                                "id": e.event_id,
+                                "time": e.origin_time.isoformat(),
+                                "latitude": e.latitude,
+                                "longitude": e.longitude,
+                                "signal_type": "report",
+                                "confidence": 1.0,
+                                "equivalent_magnitude": e.magnitude,
+                            })
+                    sig_df = pd.DataFrame(sig_rows) if sig_rows else None
+
+                    bounds = (float(min_lon), float(min_lat), float(max_lon), float(max_lat))
+                    df_scored = score_grid(
+                        cat_df,
+                        as_of=ref_time,
+                        bounds=bounds,
+                        resolution_deg=resolution,
+                        magnitude_threshold=min_magnitude,
+                        local_signals=sig_df,
+                    )
+
+                    grid_cells = []
+                    for _, row in df_scored.iterrows():
+                        prob = float(row["probability_24h"] if time_window == "24h" else row["probability_7d"])
+                        rel = float(row["relative_risk"])
+                        grid_cells.append({
+                            "lat": round(float(row["lat"]), 4),
+                            "lon": round(float(row["lon"]), 4),
+                            "risk_score": round(min(1.0, max(0.0, prob)), 2),
+                            "risk_level": str(row["risk_level"]),
+                            "relative_risk": round(rel, 1),
+                        })
+
+                    return {
+                        "time_window": time_window,
+                        "grid": grid_cells,
+                    }
+            except Exception:
+                # Seamless fallback to robust vectorized numpy engine
+                pass
+
+        # Fallback to robust vectorized numpy calculation
         buffer_deg = 1.5
         area_events = [
             e for e in all_events
@@ -264,6 +351,7 @@ class RiskService:
 
                 total_rate = baseline_rate + trig_rate
                 relative = total_rate / effective_baseline
+                risk_level = classify_risk_level(relative)
 
                 if total_rate <= 0.0:
                     risk_score = 0.0
@@ -275,6 +363,8 @@ class RiskService:
                     "lat": round(float(glat), 4),
                     "lon": round(float(glon), 4),
                     "risk_score": risk_score,
+                    "risk_level": risk_level,
+                    "relative_risk": round(float(relative), 1),
                 })
 
         return {

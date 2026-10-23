@@ -21,6 +21,7 @@ No authentication required for the hackathon prototype.
 | POST   | `/local-event`        | Add a local event/report and update risk         |
 | POST   | `/refresh-catalog`    | Download latest catalog from USGS (online only)  |
 | GET    | `/risk/grid`          | Get risk values on a regular grid (for heatmap)  |
+| POST   | `/forecasts`          | Compute aftershock hazard triggered by an event  |
 
 ---
 
@@ -250,6 +251,74 @@ GET /risk/grid?min_lat=33.5&max_lat=34.5&min_lon=-119&max_lon=-117.5&resolution=
   ]
 }
 ```
+
+---
+
+## 7. Event-Triggered Aftershock Forecast
+
+### `POST /forecasts`
+
+Calculates localized aftershock probability and expected event rates explicitly triggered by a specific reference earthquake in the local cache.
+
+#### Request Body:
+```json
+{
+  "trigger_event_id": "us7000abcd",
+  "target": {
+    "latitude": 34.05,
+    "longitude": -118.25,
+    "radius_km": 50.0
+  },
+  "window_hours": 24,
+  "minimum_magnitude": 4.0
+}
+```
+
+| Field                  | Type    | Required | Constraints                | Description                                                |
+|------------------------|---------|----------|----------------------------|------------------------------------------------------------|
+| `trigger_event_id`     | string  | Yes      | Non-empty string           | ID of the reference earthquake present in local cache       |
+| `target.latitude`      | float   | Yes      | -90.0 to 90.0              | Center latitude of the forecast assessment zone            |
+| `target.longitude`     | float   | Yes      | -180.0 to 180.0            | Center longitude of the forecast assessment zone           |
+| `target.radius_km`     | float   | Yes      | 0 < radius <= 500          | Radius in kilometers around target coordinates             |
+| `window_hours`         | integer | Yes      | 24 or 168                  | Forecast horizon: `24` (1 day) or `168` (7 days)           |
+| `minimum_magnitude`    | float   | Yes      | -1.0 to 10.0               | Threshold magnitude $M_c$ for anticipated events           |
+
+#### Response 200:
+```json
+{
+  "target": {
+    "latitude": 34.05,
+    "longitude": -118.25,
+    "radius_km": 50.0
+  },
+  "window_hours": 24,
+  "minimum_magnitude": 4.0,
+  "expected_event_count": 0.42,
+  "probability_at_least_one": 0.34,
+  "baseline_rate_per_day": 0.018,
+  "relative_activity_score": 6.8,
+  "data_as_of": "2026-10-23T14:30:00Z",
+  "model": "omori-style-v1",
+  "assumptions": [
+    "Spatial kernel decays exponentially with distance d0 = 40 km",
+    "Productivity follows Gutenberg-Richter scaling with alpha = 0.9",
+    "Temporal rate decay follows modified Omori p = 1.1, c = 0.05d"
+  ],
+  "limitations": [
+    "Assumes isotropic circular spatial distribution",
+    "Requires non-empty catalog synchronization for baseline determination"
+  ]
+}
+```
+
+---
+
+## 8. Planned Edge Endpoints (Frontend Roadmap)
+
+1. **`GET /geocode?q=<place>`**: Offline place-to-coordinate lookup using a local SQLite gazetteer.
+2. **`GET /risk/alerts?min_risk=0.7`**: Active high-risk regional clusters feed.
+3. **`GET /local-events` & `DELETE /local-event/<id>`**: Local observation reports listing and deletion.
+4. **`GET /events/<event_id>`**: Detailed single event metadata and station records.
 
 ---
 

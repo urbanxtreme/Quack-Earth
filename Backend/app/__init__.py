@@ -38,6 +38,12 @@ def create_app(config_object=None):
     app.register_blueprint(events_bp)
     app.register_blueprint(forecasts_bp)
 
+    # Register with /api prefix for direct frontend calls
+    app.register_blueprint(status_bp, url_prefix="/api", name="status_api")
+    app.register_blueprint(risk_bp, url_prefix="/api", name="risk_api")
+    app.register_blueprint(events_bp, url_prefix="/api", name="events_api")
+    app.register_blueprint(forecasts_bp, url_prefix="/api", name="forecasts_api")
+
     # Also register with /api/v1 prefix for compatibility
     app.register_blueprint(status_bp, url_prefix="/api/v1", name="status_v1")
     app.register_blueprint(risk_bp, url_prefix="/api/v1", name="risk_v1")

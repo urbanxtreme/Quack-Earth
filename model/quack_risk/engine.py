@@ -36,9 +36,10 @@ def score_grid(
 
     Events after ``as_of`` are ignored. Events older than the recent window
     stay in the baseline and do not trigger. Accelerometer hits and resident
-    reports in ``local_signals`` join the same sum, scaled by confidence.
-    They do not change the baseline. ``use_ml_adjustment`` is the Phase 3
-    residual and raises if turned on.
+    reports in ``local_signals`` join the same sum only after the corroboration
+    gate: one phone beside a measured quake, or a cluster that agrees. They
+    do not change the baseline. ``use_ml_adjustment`` is the Phase 3 residual
+    and raises if turned on.
 
     Rates are expected events per day in the cell at or above ``M_c``.
     """
@@ -78,7 +79,12 @@ def score_grid(
         flat_area=flat_area,
         params=params,
     )
-    local_rows = signals_to_triggers(local_signals, as_of=as_of_utc, params=params)
+    local_rows = signals_to_triggers(
+        local_signals,
+        as_of=as_of_utc,
+        params=params,
+        catalog=events,
+    )
     triggered = triggered + _triggered_rates(
         local_rows,
         as_of=as_of_utc,

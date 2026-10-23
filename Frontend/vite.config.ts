@@ -20,6 +20,19 @@ export default defineConfig({
           'User-Agent': 'QuackEarth-Frontend/1.0',
         },
       },
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+        configure: (proxy) => {
+          proxy.on('error', (_err, _req, res) => {
+            if (res && 'writeHead' in res && !res.headersSent) {
+              res.writeHead(503, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Backend offline', status: 'offline' }));
+            }
+          });
+        },
+      },
     },
   },
 })

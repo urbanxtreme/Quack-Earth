@@ -2,14 +2,29 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-def error(message: str, status: int = 400, code: str | None = None) -> tuple[dict[str, Any], int]:
+def error(
+    first: str,
+    second: Any = 400,
+    status: int = 400,
+    code: str | None = None,
+) -> tuple[dict[str, Any], int]:
+    if isinstance(second, str):
+        error_code = first
+        error_message = second
+        final_status = status if isinstance(status, int) else 400
+    else:
+        error_message = first
+        final_status = second if isinstance(second, int) else 400
+        error_code = code
+
     data: dict[str, Any] = {
-        "error": message,
-        "message": message,
+        "error": error_message,
+        "message": error_message,
     }
-    if code:
-        data["code"] = code
-    return data, status
+    if error_code:
+        data["code"] = error_code
+    return data, final_status
+
 
 
 def parse_iso(value: str, field: str = "time") -> datetime:

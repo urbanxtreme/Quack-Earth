@@ -9,7 +9,7 @@ from ..models.forecast import Forecast, Target
 def haversine_km(lat1, lon1, lat2, lon2):
     lat1, lon1, lat2, lon2 = map(math.radians, (lat1, lon1, lat2, lon2))
     a = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
-    return 6371.0088 * 2 * math.asin(math.sqrt(a))
+    return 6371.0088 * 2 * math.asin(math.sqrt(min(1.0, max(0.0, a))))
 
 
 class ForecastService:

@@ -31,7 +31,7 @@ class EventRepository:
                     latitude REAL NOT NULL, longitude REAL NOT NULL,
                     depth_km REAL, magnitude REAL, magnitude_type TEXT,
                     review_status TEXT, source TEXT NOT NULL, fetched_at TEXT NOT NULL,
-                    note TEXT
+                    note TEXT, place TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_events_origin_time ON events(origin_time);
                 CREATE TABLE IF NOT EXISTS cache_metadata (
@@ -39,10 +39,12 @@ class EventRepository:
                 );
                 """
             )
-            # Ensure note column exists for existing databases
+            # Ensure note and place columns exist for existing databases
             cols = [row[1] for row in connection.execute("PRAGMA table_info(events)").fetchall()]
             if "note" not in cols:
                 connection.execute("ALTER TABLE events ADD COLUMN note TEXT")
+            if "place" not in cols:
+                connection.execute("ALTER TABLE events ADD COLUMN place TEXT")
 
         self._seed_if_empty()
 
@@ -58,6 +60,9 @@ class EventRepository:
                     with open(fixture_path, mode="r", encoding="utf-8") as f:
                         reader = csv.DictReader(f)
                         for row in reader:
+                            place = row.get("place")
+                            if not place:
+                                place = f"Kahramanmaras Region, Turkey ({float(row['latitude']):.2f}°N, {float(row['longitude']):.2f}°E)"
                             events.append(
                                 Event(
                                     event_id=row["id"],
@@ -70,6 +75,8 @@ class EventRepository:
                                     review_status="reviewed",
                                     source=row.get("source", "usgs"),
                                     fetched_at=now,
+                                    note=None,
+                                    place=place,
                                 )
                             )
                     if events:
@@ -80,26 +87,71 @@ class EventRepository:
                         })
                 except Exception:
                     pass
+        self.export_model_cache()
+
+    def export_model_cache(self):
+        cache_dir = Path(__file__).resolve().parents[3] / "model" / "data" / "cache"
+        if not cache_dir.exists():
+            return
+        try:
+            import json
+            all_events = self.list_events(limit=50000)
+            catalog_path = cache_dir / "catalog.csv"
+            signals_path = cache_dir / "signals.json"
+
+            cat_events = [e for e in all_events if e.source != "user_report" and not e.event_id.startswith("local_")]
+            with open(catalog_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["id", "time", "latitude", "longitude", "depth_km", "magnitude", "mag_type", "source"])
+                for e in sorted(cat_events, key=lambda x: x.origin_time):
+                    writer.writerow([
+                        e.event_id,
+                        e.origin_time.isoformat().replace("+00:00", "Z"),
+                        e.latitude,
+                        e.longitude,
+                        e.depth_km if e.depth_km is not None else 10.0,
+                        e.magnitude if e.magnitude is not None else 4.0,
+                        e.magnitude_type or "",
+                        "usgs" if "usgs" in e.source.lower() else "local",
+                    ])
+
+            local_events = [e for e in all_events if e.source == "user_report" or e.event_id.startswith("local_")]
+            sig_data = []
+            for e in sorted(local_events, key=lambda x: x.origin_time):
+                sig_data.append({
+                    "id": e.event_id,
+                    "time": e.origin_time.isoformat().replace("+00:00", "Z"),
+                    "latitude": e.latitude,
+                    "longitude": e.longitude,
+                    "signal_type": "report",
+                    "confidence": 1.0,
+                    "equivalent_magnitude": e.magnitude,
+                })
+            signals_path.write_text(json.dumps(sig_data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
 
     def upsert_events(self, events: Iterable[Event]):
         with closing(self._connect()) as connection, connection:
             connection.executemany(
-                """INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(event_id) DO UPDATE SET
                 origin_time=excluded.origin_time, latitude=excluded.latitude,
                 longitude=excluded.longitude, depth_km=excluded.depth_km,
                 magnitude=excluded.magnitude, magnitude_type=excluded.magnitude_type,
                 review_status=excluded.review_status, source=excluded.source,
-                fetched_at=excluded.fetched_at, note=excluded.note""",
+                fetched_at=excluded.fetched_at, note=excluded.note, place=excluded.place""",
                 [
                     (
                         e.event_id, e.origin_time.isoformat(), e.latitude, e.longitude,
                         e.depth_km, e.magnitude, e.magnitude_type, e.review_status,
                         e.source, e.fetched_at.isoformat(), getattr(e, "note", None),
+                        getattr(e, "place", None),
                     )
                     for e in events
                 ],
             )
+        self.export_model_cache()
 
     def get_next_local_event_id(self) -> str:
         with closing(self._connect()) as connection:
@@ -120,11 +172,15 @@ class EventRepository:
                     radius_km: float | None = None, limit: int = 5000) -> list[Event]:
         clauses, values = [], []
         if start:
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
             clauses.append("origin_time >= ?")
-            values.append(start.isoformat())
+            values.append(start.astimezone(timezone.utc).isoformat())
         if end:
+            if end.tzinfo is None:
+                end = end.replace(tzinfo=timezone.utc)
             clauses.append("origin_time <= ?")
-            values.append(end.isoformat())
+            values.append(end.astimezone(timezone.utc).isoformat())
         if min_magnitude is not None:
             clauses.append("magnitude >= ?")
             values.append(min_magnitude)
@@ -171,8 +227,9 @@ class EventRepository:
     def _from_row(row):
         col_keys = row.keys() if hasattr(row, "keys") else []
         note = row["note"] if "note" in col_keys else None
+        place = row["place"] if "place" in col_keys else None
         return Event(
             row["event_id"], _timestamp(row["origin_time"]), row["latitude"], row["longitude"],
             row["depth_km"], row["magnitude"], row["magnitude_type"], row["review_status"],
-            row["source"], _timestamp(row["fetched_at"]), note,
+            row["source"], _timestamp(row["fetched_at"]), note, place,
         )
