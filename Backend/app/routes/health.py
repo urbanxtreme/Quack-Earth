@@ -1,18 +1,24 @@
 from flask import Blueprint, current_app
 
-health_bp = Blueprint("health", __name__)
+from ..services.catalog import check_online
+
+status_bp = Blueprint("status", __name__)
 
 
-@health_bp.get("/health")
-def health():
-    metadata = current_app.extensions["event_repository"].metadata()
+@status_bp.get("/status")
+@status_bp.get("/health")
+def status():
+    repository = current_app.extensions["event_repository"]
+    meta = repository.metadata()
+    online = check_online()
+    mode = "online" if online else "offline"
+    last_update = meta.get("last_successful_sync")
+
     return {
         "status": "ok",
-        "cache": {
-            "has_events": metadata["event_count"] > 0,
-            "event_count": metadata["event_count"],
-            "last_successful_sync": metadata.get("last_successful_sync"),
-            "last_sync_error": metadata.get("last_sync_error") or None,
-            "source": metadata.get("source", "USGS ComCat"),
-        },
-    }
+        "mode": mode,
+        "cached_events": meta.get("cached_events", 0),
+        "local_events_added": meta.get("local_events_added", 0),
+        "last_catalog_update": last_update or None,
+        "model": "omori-style-v1",
+    }, 200

@@ -1,4 +1,5 @@
 Flask>=3.0,<4
+Flask-Cors>=4.0,<5
 numpy>=1.26,<3
 requests>=2.31,<3
 pytest>=8,<9
