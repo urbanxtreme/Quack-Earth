@@ -196,3 +196,54 @@ def test_refresh_catalog_online_mock(client):
         assert data["status"] == "updated"
         assert data["events_fetched"] == 1
         assert "last_catalog_update" in data
+
+
+def test_events_geojson_format(client):
+    res = client.get("/events?format=geojson&limit=10")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["type"] == "FeatureCollection"
+    assert "features" in data
+    assert isinstance(data["features"], list)
+    if data["features"]:
+        feat = data["features"][0]
+        assert feat["type"] == "Feature"
+        assert "geometry" in feat
+        assert "properties" in feat
+        assert feat["geometry"]["type"] == "Point"
+
+
+def test_risk_grid_geojson_format(client):
+    res = client.get("/risk/grid?min_lat=33.5&max_lat=34.5&min_lon=-119.0&max_lon=-117.5&resolution=0.5&format=geojson")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["type"] == "FeatureCollection"
+    assert "features" in data
+    assert len(data["features"]) > 0
+    feat = data["features"][0]
+    assert feat["type"] == "Feature"
+    assert feat["geometry"]["type"] == "Point"
+    assert "risk_score" in feat["properties"]
+
+
+def test_model_cache_export_and_quack_risk_compatibility(app):
+    import sys
+    model_dir = str(Path(__file__).resolve().parents[2] / "model")
+    if model_dir not in sys.path:
+        sys.path.insert(0, model_dir)
+    from quack_risk import load_catalog, load_signals
+
+    repo = app.extensions["event_repository"]
+    repo.export_model_cache()
+
+    cache_dir = Path(__file__).resolve().parents[2] / "model" / "data" / "cache"
+    catalog_path = cache_dir / "catalog.csv"
+    signals_path = cache_dir / "signals.json"
+
+    assert catalog_path.exists()
+    cat_df = load_catalog(catalog_path)
+    assert not cat_df.empty
+
+    assert signals_path.exists()
+    sig_df = load_signals(signals_path)
+    assert isinstance(sig_df, object)

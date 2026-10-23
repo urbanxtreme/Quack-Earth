@@ -80,6 +80,50 @@ class EventRepository:
                         })
                 except Exception:
                     pass
+        self.export_model_cache()
+
+    def export_model_cache(self):
+        cache_dir = Path(__file__).resolve().parents[3] / "model" / "data" / "cache"
+        if not cache_dir.exists():
+            return
+        try:
+            import json
+            all_events = self.list_events(limit=50000)
+            catalog_path = cache_dir / "catalog.csv"
+            signals_path = cache_dir / "signals.json"
+
+            cat_events = [e for e in all_events if e.source != "user_report" and not e.event_id.startswith("local_")]
+            if cat_events:
+                with open(catalog_path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["id", "time", "latitude", "longitude", "depth_km", "magnitude", "mag_type", "source"])
+                    for e in sorted(cat_events, key=lambda x: x.origin_time):
+                        writer.writerow([
+                            e.event_id,
+                            e.origin_time.isoformat().replace("+00:00", "Z"),
+                            e.latitude,
+                            e.longitude,
+                            e.depth_km if e.depth_km is not None else 10.0,
+                            e.magnitude if e.magnitude is not None else 4.0,
+                            e.magnitude_type or "",
+                            "usgs" if "usgs" in e.source.lower() else "local",
+                        ])
+
+            local_events = [e for e in all_events if e.source == "user_report" or e.event_id.startswith("local_")]
+            sig_data = []
+            for e in sorted(local_events, key=lambda x: x.origin_time):
+                sig_data.append({
+                    "id": e.event_id,
+                    "time": e.origin_time.isoformat().replace("+00:00", "Z"),
+                    "latitude": e.latitude,
+                    "longitude": e.longitude,
+                    "signal_type": "report",
+                    "confidence": 1.0,
+                    "equivalent_magnitude": e.magnitude,
+                })
+            signals_path.write_text(json.dumps(sig_data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
 
     def upsert_events(self, events: Iterable[Event]):
         with closing(self._connect()) as connection, connection:
@@ -100,6 +144,7 @@ class EventRepository:
                     for e in events
                 ],
             )
+        self.export_model_cache()
 
     def get_next_local_event_id(self) -> str:
         with closing(self._connect()) as connection:
