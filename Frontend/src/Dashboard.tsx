@@ -233,7 +233,12 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
           <button
             type="button"
             className={`nav-tab-btn ${activeTab === "map" ? "active" : ""}`}
-            onClick={() => setActiveTab("map")}
+            onClick={() => {
+              setActiveTab("map");
+              if (window.innerWidth <= 768) {
+                setIsSidebarOpen(false);
+              }
+            }}
           >
             <span className="nav-icon">🗺️</span>
             <span className="nav-text">Map</span>
@@ -261,7 +266,10 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
             }}
           >
             <span className="nav-icon">📊</span>
-            <span className="nav-text">Risk Anticipation</span>
+            <span className="nav-text">
+              <span className="nav-text-full">Risk Anticipation</span>
+              <span className="nav-text-short">Risk</span>
+            </span>
           </button>
 
           <button
@@ -296,7 +304,8 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
           onClick={() => setIsSidebarOpen((prev) => !prev)}
           title={isSidebarOpen ? "Collapse Panel" : "Expand Panel"}
         >
-          {isSidebarOpen ? "Hide Panel ❯" : "❮ Show Panel"}
+          <span className="sidebar-toggle-text-full">{isSidebarOpen ? "Hide Panel ❯" : "❮ Show Panel"}</span>
+          <span className="sidebar-toggle-text-short">{isSidebarOpen ? "✕" : "▤"}</span>
         </button>
       </header>
 
@@ -328,6 +337,18 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
         {/* Right Glassmorphism Sidebar Panel */}
         {isSidebarOpen && (
           <aside className="dashboard-sidebar-panel">
+            {/* Mobile Sheet Handle & Header */}
+            <div className="mobile-drawer-header">
+              <div className="drawer-drag-pill" />
+              <button
+                type="button"
+                className="drawer-close-btn"
+                onClick={() => setIsSidebarOpen(false)}
+                title="Close drawer"
+              >
+                ✕ Close
+              </button>
+            </div>
             <div className="sidebar-tab-content">
               {activeTab === "events" && (
                 <EventsPanel

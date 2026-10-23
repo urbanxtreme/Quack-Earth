@@ -197,6 +197,7 @@ export default function MapViewer({
   }, [isPlayingTimeline]);
   const [showEventsLayer, setShowEventsLayer] = useState<boolean>(true);
   const [showHeatmapLayer, setShowHeatmapLayer] = useState<boolean>(true);
+  const [isLegendExpanded, setIsLegendExpanded] = useState<boolean>(true);
 
   const [viewportInfo, setViewportInfo] = useState<{ lng: string; lat: string; zoom: string }>({
     lng: "0.00",
@@ -920,44 +921,61 @@ export default function MapViewer({
 
       {/* Heatmap Legend and Active Center Info Overlay */}
       {heatmapStats && (
-        <aside className="heatmap-info-card">
-          <div className="heatmap-info-header">
+        <aside className={`heatmap-info-card ${!isLegendExpanded ? "minimized" : ""}`}>
+          <div
+            className="heatmap-info-header"
+            onClick={() => setIsLegendExpanded((prev) => !prev)}
+            role="button"
+            tabIndex={0}
+            title={isLegendExpanded ? "Click to minimize card" : "Click to expand card"}
+          >
             <span className="heatmap-fire-icon">🔥</span>
-            <div>
+            <div className="heatmap-header-titles">
               <h3 className="heatmap-location-title">{heatmapStats.locationName}</h3>
               <p className="heatmap-coords">
-                Center: {heatmapStats.centerLat.toFixed(3)}°, {heatmapStats.centerLon.toFixed(3)}°
+                {heatmapStats.centerLat.toFixed(3)}°, {heatmapStats.centerLon.toFixed(3)}°
               </p>
             </div>
+            <button
+              type="button"
+              className="card-collapse-btn"
+              aria-label={isLegendExpanded ? "Minimize card" : "Expand card"}
+            >
+              {isLegendExpanded ? "▾" : "▴"}
+            </button>
           </div>
 
-          <div className="heatmap-legend">
-            <div className="legend-label-row">
-              <span>Low</span>
-              <span>Single Center Heatmap</span>
-              <span>High</span>
-            </div>
-            <div className="legend-gradient-bar" />
-          </div>
+          {isLegendExpanded && (
+            <>
+              <div className="heatmap-legend">
+                <div className="legend-label-row">
+                  <span>Low</span>
+                  <span>Thermal Intensity</span>
+                  <span>High</span>
+                </div>
+                <div className="legend-gradient-bar" />
+              </div>
 
-          <div className="heatmap-metrics-row">
-            <div className="metric-item">
-              <span className="metric-val">1 Center</span>
-              <span className="metric-lbl">Target Epicenter</span>
-            </div>
-            <div className="metric-item">
-              <span className="metric-val">Radial</span>
-              <span className="metric-lbl">Gradient</span>
-            </div>
-            <div className="metric-item">
-              <span className="metric-val">{events.length}</span>
-              <span className="metric-lbl">Earthquakes Shown</span>
-            </div>
-          </div>
-          {lastSyncTime && (
-            <p className="heatmap-sync-time">
-              Catalog synced: {new Date(lastSyncTime).toLocaleString()}
-            </p>
+              <div className="heatmap-metrics-row">
+                <div className="metric-item">
+                  <span className="metric-val">1 Center</span>
+                  <span className="metric-lbl">Epicenter</span>
+                </div>
+                <div className="metric-item">
+                  <span className="metric-val">Radial</span>
+                  <span className="metric-lbl">Gradient</span>
+                </div>
+                <div className="metric-item">
+                  <span className="metric-val">{events.length}</span>
+                  <span className="metric-lbl">Earthquakes</span>
+                </div>
+              </div>
+              {lastSyncTime && (
+                <p className="heatmap-sync-time">
+                  Catalog synced: {new Date(lastSyncTime).toLocaleTimeString()}
+                </p>
+              )}
+            </>
           )}
         </aside>
       )}
@@ -1020,7 +1038,10 @@ export default function MapViewer({
           <span>Lat: {viewportInfo.lat}°</span>
           <span>Lng: {viewportInfo.lng}°</span>
           <span>Zoom: {viewportInfo.zoom}</span>
-          <span className="click-hint">💡 Tip: Click anywhere to evaluate risk</span>
+          <span className="click-hint">
+            <span className="click-hint-full">💡 Tip: Click anywhere to evaluate risk</span>
+            <span className="click-hint-short">💡 Click map for risk</span>
+          </span>
         </div>
       </footer>
 
