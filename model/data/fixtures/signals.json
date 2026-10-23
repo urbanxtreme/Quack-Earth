@@ -1,0 +1,11 @@
+[
+  {
+    "id": "sig-accel-1",
+    "time": "2023-02-06T03:00:00Z",
+    "latitude": 37.22,
+    "longitude": 37.02,
+    "signal_type": "accelerometer",
+    "confidence": 0.8,
+    "equivalent_magnitude": 3.9
+  }
+]
