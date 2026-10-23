@@ -162,6 +162,7 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [activeLocation, setActiveLocation] = useState<GeocodedLocation | null>(null);
   const [heatmapStats, setHeatmapStats] = useState<HeatmapStats | null>(null);
+  const [isHeatmapCardMinimized, setIsHeatmapCardMinimized] = useState<boolean>(false);
   const [eventMarkerCount, setEventMarkerCount] = useState<number>(0);
   const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(false);
 
@@ -402,6 +403,7 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
         centerLat: location.lat,
         centerLon: location.lon,
       });
+      setIsHeatmapCardMinimized(false);
 
       setSearchFeedback(`Heatmap centered on ${location.name.split(",")[0]}`);
       setTimeout(() => setSearchFeedback(null), 4000);
@@ -678,7 +680,7 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
 
       {/* Heatmap Legend and Active Center Info Overlay */}
       {heatmapStats && (
-        <aside className="heatmap-info-card">
+        <aside className={`heatmap-info-card ${isHeatmapCardMinimized ? "minimized" : ""}`}>
           <div className="heatmap-info-header">
             <span className="heatmap-fire-icon">🔥</span>
             <div>
@@ -687,8 +689,29 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
                 Center: {heatmapStats.centerLat.toFixed(3)}°, {heatmapStats.centerLon.toFixed(3)}°
               </p>
             </div>
+            <div className="heatmap-card-actions">
+              <button
+                className="heatmap-card-action"
+                type="button"
+                onClick={() => setIsHeatmapCardMinimized((current) => !current)}
+                aria-label={isHeatmapCardMinimized ? "Expand location information" : "Minimize location information"}
+                title={isHeatmapCardMinimized ? "Expand" : "Minimize"}
+              >
+                {isHeatmapCardMinimized ? "+" : "−"}
+              </button>
+              <button
+                className="heatmap-card-action close"
+                type="button"
+                onClick={() => setHeatmapStats(null)}
+                aria-label="Close location information"
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
           </div>
 
+          {!isHeatmapCardMinimized && <div className="heatmap-card-content">
           <div className="heatmap-legend">
             <div className="legend-label-row">
               <span>Low</span>
@@ -717,6 +740,7 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
               Catalog synced: {new Date(lastSyncTime).toLocaleString()}
             </p>
           )}
+          </div>}
         </aside>
       )}
 
