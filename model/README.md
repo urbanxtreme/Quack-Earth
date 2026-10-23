@@ -25,7 +25,7 @@ python model/scripts/run_score.py
 Tests still run from `model/`:
 
 ```bash
-python -m pytest tests/test_contract.py tests/test_kernels.py tests/test_engine.py tests/test_multimodal.py tests/test_public.py
+python -m pytest tests/test_contract.py tests/test_kernels.py tests/test_engine.py tests/test_multimodal.py tests/test_public.py tests/test_calibrate.py
 ```
 
 The default command scores `data/fixtures/catalog.csv` at `2023-02-07T00:00:00Z` over west 35, south 34, east 41, north 41 and writes `outputs/grids/risk_grid.csv` plus `risk_grid.geojson`.
@@ -121,16 +121,30 @@ Rates are expected events per day in that cell at or above `M_c` (default 4.0). 
 
 | name | value | role |
 | --- | --- | --- |
-| k | 0.01 | productivity; Phase 3 may fit it |
+| k | 0.01 | productivity; replaced by `data/cache/params.json` when that file exists |
 | alpha | 0.9 | magnitude scaling; held fixed |
-| c_days | 0.05 | Omori offset in days; Phase 3 may fit it |
-| p | 1.1 | Omori exponent; Phase 3 may fit it |
+| c_days | 0.05 | Omori offset in days; replaced by the fitted file when it exists |
+| p | 1.1 | Omori exponent; replaced by the fitted file when it exists |
 | magnitude_threshold | 4.0 | completeness magnitude `M_c` |
 | recent_window_days | 14 | events older than this do not trigger |
 | kernel | gaussian | `powerlaw` is the alternate |
 
-Fit bounds when Phase 3 runs: `k` above 0, `c_days` in `[0.001, 1]`, `p` in `[0.8, 1.5]`.
+Fit bounds: `k` above 0, `c_days` in `[0.001, 1]`, `p` in `[0.8, 1.5]`. Alpha is not fitted.
+
+## Fitted parameters and plots
+
+The fixture is too small to fit. Download the regional catalog once, or let the backend drop the same file later:
+
+```bash
+python model/scripts/bootstrap_cache.py
+python model/scripts/run_calibrate.py
+python model/scripts/run_eval.py
+```
+
+`bootstrap_cache.py` writes `data/cache/catalog.csv` for the demo box, magnitude 4 and above, from 2018-01-01 through 2023-02-20. `run_calibrate.py` fits `K`, `c`, and `p` on the 10 days after the largest event and writes `data/cache/params.json`. The next `run_score.py` uses that file when it is present. `--defaults` keeps the built-in values, which is how the M 6.2 scenario numbers stay fixed.
+
+`run_eval.py` writes four figures in `outputs/plots/`: `omori_decay.png`, `risk_snapshot_24h.png`, `capture_curve.png`, and `likelihood_bars.png`, plus `metrics.json`. The logistic residual stays off.
 
 ## What is not in this phase
 
-No USGS download, no parameter fitting, no plots, and no map. `data/cache/` is the drop zone for the backend catalog. Point `--catalog` at it when the columns above are present. Local signals go in `--signals`. A new catalog row or a new signal file is picked up by running the scorer again.
+No map. `data/cache/` is still the drop zone for a later backend catalog. Point `--catalog` at it when the columns above are present. Local signals go in `--signals`. A new catalog row or a new signal file is picked up by running the scorer again.
