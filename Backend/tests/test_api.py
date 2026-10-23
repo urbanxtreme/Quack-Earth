@@ -355,6 +355,8 @@ def test_forecasts_endpoint_success(client):
     assert "expected_events" in data
     assert "probability" in data
     assert "model_name" in data
+    assert "baseline_event_count" in data
+    assert "recent_qualifying_event_count" in data
 
 
 def test_get_single_event(client):

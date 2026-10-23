@@ -32,7 +32,32 @@ interface HeatmapStats {
   centerLon: number;
 }
 
+interface MapEventProperties {
+  id: string;
+  time: string;
+  lat: number;
+  lon: number;
+  magnitude: number | null;
+  depth_km?: number;
+  source: string;
+}
 
+interface MapEventFeature {
+  type: "Feature";
+  id?: string;
+  geometry: {
+    type: "Point";
+    coordinates: [number, number];
+  };
+  properties: MapEventProperties;
+}
+
+interface MapEventsResponse {
+  type: "FeatureCollection";
+  features: MapEventFeature[];
+  count: number;
+  data_as_of: string | null;
+}
 
 // Proxied through Vite dev server to guarantee 100% CORS & HTTP Range support on any local port
 const getPmtilesUrl = () => {
@@ -138,6 +163,7 @@ export default function MapViewer({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const centerMarkerRef = useRef<maplibregl.Marker | null>(null);
   const clickMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const eventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const currentHeatmapDataRef = useRef<FeatureCollection | null>(null);
 
   const [mapLoaded, setMapLoaded] = useState<boolean>(false);
@@ -151,6 +177,8 @@ export default function MapViewer({
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [activeLocation, setActiveLocation] = useState<GeocodedLocation | null>(null);
   const [heatmapStats, setHeatmapStats] = useState<HeatmapStats | null>(null);
+  const [eventMarkerCount, setEventMarkerCount] = useState<number>(0);
+  const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(false);
   const [showEventsLayer, setShowEventsLayer] = useState<boolean>(true);
   const [showHeatmapLayer, setShowHeatmapLayer] = useState<boolean>(true);
 
