@@ -181,6 +181,30 @@ def calculate_grid():
             time_window=time_window,
             min_magnitude=min_magnitude,
         )
+
+        output_format = request.args.get("format", "json").lower()
+        if output_format == "geojson":
+            features = [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [cell["lon"], cell["lat"]],
+                    },
+                    "properties": {
+                        "risk_score": cell["risk_score"],
+                        "risk_level": cell.get("risk_level", "low"),
+                        "relative_risk": cell.get("relative_risk", 1.0),
+                    },
+                }
+                for cell in result["grid"]
+            ]
+            return {
+                "type": "FeatureCollection",
+                "time_window": time_window,
+                "features": features,
+            }, 200
+
         return result, 200
     except ValueError as exc:
         return error(str(exc), 400)
