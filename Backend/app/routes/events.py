@@ -177,6 +177,7 @@ def add_local_event():
 
     source = body.get("source") or "user_report"
     note = body.get("note")
+    place = body.get("place") or (f"Report: {note[:30]}" if note else f"Local observation ({lat:.2f}°, {lon:.2f}°)")
 
     repository = current_app.extensions["event_repository"]
     event_id = repository.get_next_local_event_id()
@@ -194,6 +195,7 @@ def add_local_event():
         source=source,
         fetched_at=now,
         note=note,
+        place=place,
     )
 
     repository.upsert_events([local_event])

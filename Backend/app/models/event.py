@@ -16,6 +16,7 @@ class Event:
     source: str
     fetched_at: datetime
     note: str | None = None
+    place: str | None = None
 
     @property
     def id(self) -> str:
@@ -41,6 +42,7 @@ class Event:
             "lon": self.longitude,
             "magnitude": self.magnitude,
             "source": "usgs" if "usgs" in self.source.lower() else self.source,
+            "place": self.place or (self.note if self.note else f"Region near {self.latitude:.2f}°, {self.longitude:.2f}°"),
         }
         if self.depth_km is not None:
             data["depth_km"] = self.depth_km

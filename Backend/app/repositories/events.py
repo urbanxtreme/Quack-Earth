@@ -31,7 +31,7 @@ class EventRepository:
                     latitude REAL NOT NULL, longitude REAL NOT NULL,
                     depth_km REAL, magnitude REAL, magnitude_type TEXT,
                     review_status TEXT, source TEXT NOT NULL, fetched_at TEXT NOT NULL,
-                    note TEXT
+                    note TEXT, place TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_events_origin_time ON events(origin_time);
                 CREATE TABLE IF NOT EXISTS cache_metadata (
@@ -39,10 +39,12 @@ class EventRepository:
                 );
                 """
             )
-            # Ensure note column exists for existing databases
+            # Ensure note and place columns exist for existing databases
             cols = [row[1] for row in connection.execute("PRAGMA table_info(events)").fetchall()]
             if "note" not in cols:
                 connection.execute("ALTER TABLE events ADD COLUMN note TEXT")
+            if "place" not in cols:
+                connection.execute("ALTER TABLE events ADD COLUMN place TEXT")
 
         self._seed_if_empty()
 
@@ -58,6 +60,9 @@ class EventRepository:
                     with open(fixture_path, mode="r", encoding="utf-8") as f:
                         reader = csv.DictReader(f)
                         for row in reader:
+                            place = row.get("place")
+                            if not place:
+                                place = f"Kahramanmaras Region, Turkey ({float(row['latitude']):.2f}°N, {float(row['longitude']):.2f}°E)"
                             events.append(
                                 Event(
                                     event_id=row["id"],
@@ -70,6 +75,8 @@ class EventRepository:
                                     review_status="reviewed",
                                     source=row.get("source", "usgs"),
                                     fetched_at=now,
+                                    note=None,
+                                    place=place,
                                 )
                             )
                     if events:
@@ -128,18 +135,19 @@ class EventRepository:
     def upsert_events(self, events: Iterable[Event]):
         with closing(self._connect()) as connection, connection:
             connection.executemany(
-                """INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(event_id) DO UPDATE SET
                 origin_time=excluded.origin_time, latitude=excluded.latitude,
                 longitude=excluded.longitude, depth_km=excluded.depth_km,
                 magnitude=excluded.magnitude, magnitude_type=excluded.magnitude_type,
                 review_status=excluded.review_status, source=excluded.source,
-                fetched_at=excluded.fetched_at, note=excluded.note""",
+                fetched_at=excluded.fetched_at, note=excluded.note, place=excluded.place""",
                 [
                     (
                         e.event_id, e.origin_time.isoformat(), e.latitude, e.longitude,
                         e.depth_km, e.magnitude, e.magnitude_type, e.review_status,
                         e.source, e.fetched_at.isoformat(), getattr(e, "note", None),
+                        getattr(e, "place", None),
                     )
                     for e in events
                 ],
@@ -216,8 +224,9 @@ class EventRepository:
     def _from_row(row):
         col_keys = row.keys() if hasattr(row, "keys") else []
         note = row["note"] if "note" in col_keys else None
+        place = row["place"] if "place" in col_keys else None
         return Event(
             row["event_id"], _timestamp(row["origin_time"]), row["latitude"], row["longitude"],
             row["depth_km"], row["magnitude"], row["magnitude_type"], row["review_status"],
-            row["source"], _timestamp(row["fetched_at"]), note,
+            row["source"], _timestamp(row["fetched_at"]), note, place,
         )

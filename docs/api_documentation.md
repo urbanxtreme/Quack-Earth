@@ -2,7 +2,7 @@
 
 **Version:** 1.0  
 **Base URL (local):** `http://localhost:8000`  
-*(All endpoints are also available with the `/api/v1` prefix, e.g. `http://localhost:8000/api/v1/status`)*  
+*(All endpoints are available at root `/`, with `/api`, and with `/api/v1` prefixes, e.g. `http://localhost:8000/status`, `http://localhost:8000/api/status`, and `http://localhost:8000/api/v1/status`)*  
 **Description:** Lightweight Flask API for short-term probabilistic seismic risk estimation (`omori-style-v1`). Designed for edge and offline operation with a cached SQLite catalog, automatic synchronization with the ML model drop zone, and local user/sensor event inputs.
 
 ---
@@ -154,7 +154,8 @@ GET /events?hours=48&min_magnitude=3.5
       "lon": -118.31,
       "magnitude": 4.8,
       "depth_km": 12.4,
-      "source": "usgs"
+      "source": "usgs",
+      "place": "12 km N of Los Angeles, California"
     },
     {
       "id": "local_001",
@@ -163,7 +164,8 @@ GET /events?hours=48&min_magnitude=3.5
       "lon": -118.25,
       "magnitude": 5.1,
       "source": "user_report",
-      "note": "Felt violent shaking"
+      "note": "Felt violent shaking",
+      "place": "Report: Felt violent shaking"
     }
   ]
 }
