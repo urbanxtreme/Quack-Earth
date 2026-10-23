@@ -1,0 +1,84 @@
+{
+  "as_of": "2024-01-15T03:35:00Z",
+  "peak": {
+    "lat": 37.175,
+    "lon": 37.025,
+    "probability_24h": 0.174,
+    "public_zone": "priority",
+    "probability_m5_24h": 0.0189,
+    "probability_m6_24h": 0.0019
+  },
+  "limit": "This is the aftershock chance for the next 24 hours. A field commander decides evacuation.",
+  "sectors": [
+    {
+      "lat": 37.175,
+      "lon": 37.025,
+      "probability_24h": 0.174,
+      "public_zone": "priority",
+      "probability_m5_24h": 0.0189,
+      "probability_m6_24h": 0.0019,
+      "direction": "at the peak",
+      "distance_km": 0.0,
+      "place": "at the peak",
+      "action": "Search and rescue first. Pause excavation and stop debris removal in this sector.",
+      "excavation": "pause",
+      "cells": 51
+    },
+    {
+      "lat": 37.275,
+      "lon": 36.825,
+      "probability_24h": 0.1231,
+      "public_zone": "limit work",
+      "probability_m5_24h": 0.0131,
+      "probability_m6_24h": 0.0013,
+      "direction": "northwest",
+      "distance_km": 20.9,
+      "place": "21 km northwest of the peak",
+      "action": "Pause excavation and debris removal. Stay out of damaged buildings.",
+      "excavation": "pause",
+      "cells": 32
+    },
+    {
+      "lat": 37.375,
+      "lon": 37.025,
+      "probability_24h": 0.1143,
+      "public_zone": "limit work",
+      "probability_m5_24h": 0.0121,
+      "probability_m6_24h": 0.0012,
+      "direction": "north",
+      "distance_km": 22.3,
+      "place": "22 km north of the peak",
+      "action": "Pause excavation and debris removal. Stay out of damaged buildings.",
+      "excavation": "pause",
+      "cells": 25
+    },
+    {
+      "lat": 37.075,
+      "lon": 36.825,
+      "probability_24h": 0.1066,
+      "public_zone": "limit work",
+      "probability_m5_24h": 0.0112,
+      "probability_m6_24h": 0.0011,
+      "direction": "southwest",
+      "distance_km": 21.0,
+      "place": "21 km southwest of the peak",
+      "action": "Pause excavation and debris removal. Stay out of damaged buildings.",
+      "excavation": "pause",
+      "cells": 25
+    },
+    {
+      "lat": 37.275,
+      "lon": 37.225,
+      "probability_24h": 0.1032,
+      "public_zone": "limit work",
+      "probability_m5_24h": 0.0108,
+      "probability_m6_24h": 0.0011,
+      "direction": "northeast",
+      "distance_km": 20.9,
+      "place": "21 km northeast of the peak",
+      "action": "Pause excavation and debris removal. Stay out of damaged buildings.",
+      "excavation": "pause",
+      "cells": 23
+    }
+  ]
+}
