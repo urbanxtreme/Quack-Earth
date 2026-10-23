@@ -13,7 +13,7 @@ events_bp = Blueprint("events", __name__)
 def events():
     try:
         hours_param = request.args.get("hours")
-        hours = int(hours_param) if hours_param is not None else 72
+        hours = int(float(hours_param)) if hours_param is not None else 72
         if hours <= 0:
             return error("hours must be a positive integer", 422)
 
@@ -21,7 +21,7 @@ def events():
         min_magnitude = float(min_mag_param) if min_mag_param is not None else 2.5
 
         limit_param = request.args.get("limit")
-        limit = int(limit_param) if limit_param is not None else 200
+        limit = int(float(limit_param)) if limit_param is not None else 200
         if limit <= 0:
             return error("limit must be a positive integer", 422)
 
@@ -51,6 +51,32 @@ def events():
                     )
 
         event_list = [event.to_dict() for event in records]
+
+        output_format = request.args.get("format", "json").lower()
+        if output_format == "geojson":
+            features = [
+                {
+                    "type": "Feature",
+                    "id": ev["id"],
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [ev["lon"], ev["lat"], ev.get("depth_km")],
+                    },
+                    "properties": {
+                        "mag": ev["magnitude"],
+                        "time": ev["time"],
+                        "source": ev["source"],
+                        "note": ev.get("note"),
+                    },
+                }
+                for ev in event_list
+            ]
+            return {
+                "type": "FeatureCollection",
+                "count": len(features),
+                "features": features,
+            }, 200
+
         return {
             "count": len(event_list),
             "events": event_list,
