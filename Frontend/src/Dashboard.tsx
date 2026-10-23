@@ -4,6 +4,8 @@ import EventsPanel from "./panels/EventsPanel";
 import RiskPanel from "./panels/RiskPanel";
 import ReportEventPanel from "./panels/ReportEventPanel";
 import SystemStatus from "./panels/SystemStatus";
+import SitRepModal from "./SitRepModal";
+import { PRESET_SCENARIOS } from "./scenarios";
 import {
   getSystemStatus,
   getRecentEvents,
@@ -24,6 +26,8 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
   // Navigation & UI state
   const [activeTab, setActiveTab] = useState<ActiveTab>("events");
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [isSitRepOpen, setIsSitRepOpen] = useState<boolean>(false);
+  const [activeScenarioId, setActiveScenarioId] = useState<string>("live_usgs");
 
   // Data states
   const [status, setStatus] = useState<SystemStatusType | null>(null);
@@ -91,6 +95,31 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
     }
   }, [inspectedCoords, riskTimeWindow]);
 
+  // Handle Scenario switching
+  const handleSelectScenario = useCallback((scenarioId: string) => {
+    setActiveScenarioId(scenarioId);
+    const scenario = PRESET_SCENARIOS.find((s) => s.id === scenarioId);
+    if (!scenario) return;
+
+    if (scenario.id === "live_usgs") {
+      loadEvents();
+      loadStatus();
+      loadRisk({ lat: 35.6762, lon: 139.6503 });
+      setInspectedCoords({ lat: 35.6762, lon: 139.6503 });
+      setActiveLocationLabel("Tokyo, Japan (USGS Global)");
+      return;
+    }
+
+    if (scenario.events && scenario.events.length > 0) {
+      setEvents(scenario.events);
+      const mainEvent = scenario.events[0];
+      setSelectedEvent(mainEvent);
+      setInspectedCoords(scenario.center);
+      setActiveLocationLabel(scenario.name);
+      loadRisk(scenario.center);
+    }
+  }, [loadEvents, loadStatus, loadRisk]);
+
   // Initial load
   useEffect(() => {
     loadStatus();
@@ -111,7 +140,6 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
     setInspectedCoords(coords);
     setActiveLocationLabel(`Custom Coordinates: ${coords.lat.toFixed(2)}°, ${coords.lon.toFixed(2)}°`);
     loadRisk(coords);
-    // If on map tab or others, suggest checking risk
     if (activeTab === "map") {
       setActiveTab("risk");
     }
@@ -147,13 +175,34 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
           </div>
         </div>
 
+        {/* Global Scenario Selector & SitRep Trigger */}
+        <div className="header-scenario-selector">
+          <span className="scenario-label font-mono">INCIDENT:</span>
+          <select
+            className="header-scenario-dropdown font-mono"
+            value={activeScenarioId}
+            onChange={(e) => handleSelectScenario(e.target.value)}
+            title="Switch between live USGS feed and critical disaster simulation scenarios"
+          >
+            {PRESET_SCENARIOS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.short_name} ({s.tag})
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Global Live Stat Badges */}
         <div className="header-metrics">
           <div className="metric-badge">
             <span className="metric-dot" />
             <span className="metric-label">Mode:</span>
             <span className="metric-value font-mono">
-              {status?.mode === "online" ? "USGS ONLINE" : "OFFLINE EDGE"}
+              {activeScenarioId !== "live_usgs"
+                ? "SCENARIO REPLAY"
+                : status?.mode === "online"
+                ? "USGS ONLINE"
+                : "OFFLINE EDGE"}
             </span>
           </div>
 
@@ -168,6 +217,15 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
               <span className="metric-value font-mono text-orange">M {maxMagnitude.toFixed(1)}</span>
             </div>
           )}
+
+          <button
+            type="button"
+            className="btn-sitrep-header"
+            onClick={() => setIsSitRepOpen(true)}
+            title="Generate and print an official Incident Situation Report"
+          >
+            📋 SitRep Briefing
+          </button>
         </div>
 
         {/* Primary Navigation Tabs */}
@@ -257,6 +315,8 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
             }}
             onMapClick={handleMapClick}
             targetCoords={inspectedCoords}
+            activeScenarioId={activeScenarioId}
+            onSelectScenario={handleSelectScenario}
             onSyncSuccess={() => {
               loadEvents();
               loadStatus();
@@ -291,6 +351,7 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
                   timeWindow={riskTimeWindow}
                   setTimeWindow={setRiskTimeWindow}
                   onRecalculate={() => loadRisk()}
+                  onOpenSitRep={() => setIsSitRepOpen(true)}
                 />
               )}
 
@@ -326,9 +387,10 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
                   <div className="instruction-card">
                     <h4>💡 Quick Actions</h4>
                     <ul>
-                      <li>Type any city or region in the search bar to center a single thermal heatmap.</li>
+                      <li>Select any disaster scenario from the top dropdown to review incident replays.</li>
+                      <li>Use the 72-Hour Timeline Scrubber at the bottom of the map to watch aftershocks spawn.</li>
                       <li>Click anywhere on the globe to inspect coordinates and evaluate short-term seismic hazard.</li>
-                      <li>Click earthquake marker bubbles to review depth, magnitude, and origin time.</li>
+                      <li>Click "SitRep Briefing" to print an official Civil Protection Directive.</li>
                     </ul>
                   </div>
                   <div className="panel-actions">
@@ -346,6 +408,16 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
           </aside>
         )}
       </div>
+
+      {/* Emergency SitRep Modal */}
+      <SitRepModal
+        isOpen={isSitRepOpen}
+        onClose={() => setIsSitRepOpen(false)}
+        riskData={riskData}
+        locationName={activeLocationLabel}
+        coordinates={inspectedCoords}
+        events={events}
+      />
     </div>
   );
 }

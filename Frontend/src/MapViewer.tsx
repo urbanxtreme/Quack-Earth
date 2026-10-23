@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import * as pmtiles from "pmtiles";
@@ -19,6 +19,8 @@ export interface MapViewerProps {
   onMapClick?: (coords: { lat: number; lon: number }) => void;
   targetCoords?: { lat: number; lon: number; label?: string } | null;
   onSyncSuccess?: () => void;
+  activeScenarioId?: string;
+  onSelectScenario?: (scenarioId: string) => void;
 }
 
 interface GeocodedLocation {
@@ -133,6 +135,8 @@ export default function MapViewer({
   onMapClick,
   targetCoords,
   onSyncSuccess,
+  activeScenarioId = "live_usgs",
+  onSelectScenario,
 }: MapViewerProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -151,6 +155,46 @@ export default function MapViewer({
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [activeLocation, setActiveLocation] = useState<GeocodedLocation | null>(null);
   const [heatmapStats, setHeatmapStats] = useState<HeatmapStats | null>(null);
+
+  // 72-Hour / Sequence Timeline Scrubbing state
+  const [timelinePercent, setTimelinePercent] = useState<number>(100);
+  const [isPlayingTimeline, setIsPlayingTimeline] = useState<boolean>(false);
+
+  // Chronologically sorted events
+  const sortedEvents = useMemo(() => {
+    return [...events].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+  }, [events]);
+
+  // Events filtered by scrubber position
+  const displayedEvents = useMemo(() => {
+    if (timelinePercent >= 100 || sortedEvents.length <= 1) {
+      return sortedEvents;
+    }
+    const tMin = new Date(sortedEvents[0].time).getTime();
+    const tMax = new Date(sortedEvents[sortedEvents.length - 1].time).getTime();
+    if (tMax <= tMin) return sortedEvents;
+    const cutoff = tMin + (tMax - tMin) * (timelinePercent / 100);
+    return sortedEvents.filter((e) => new Date(e.time).getTime() <= cutoff);
+  }, [sortedEvents, timelinePercent]);
+
+  // Automated playback timer
+  useEffect(() => {
+    let timer: any = null;
+    if (isPlayingTimeline) {
+      timer = setInterval(() => {
+        setTimelinePercent((prev) => {
+          if (prev >= 100) {
+            setIsPlayingTimeline(false);
+            return 100;
+          }
+          return Math.min(100, prev + 2.5);
+        });
+      }, 150);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isPlayingTimeline]);
   const [showEventsLayer, setShowEventsLayer] = useState<boolean>(true);
   const [showHeatmapLayer, setShowHeatmapLayer] = useState<boolean>(true);
 
@@ -582,15 +626,15 @@ export default function MapViewer({
     }
   }, [activeTheme, applyHeatmapLayer, handleGenerateHeatmap, initialPlace]);
 
-  // Sync events and heatmap layer when events prop changes from USGS
+  // Sync events and heatmap layer when displayedEvents changes
   useEffect(() => {
     if (mapLoaded && mapRef.current) {
-      updateEventsLayer(events);
-      if (events.length > 0) {
-        applyHeatmapLayer(buildEventsGeoJSON(events));
+      updateEventsLayer(displayedEvents);
+      if (displayedEvents.length > 0) {
+        applyHeatmapLayer(buildEventsGeoJSON(displayedEvents));
       }
     }
-  }, [events, mapLoaded, updateEventsLayer, applyHeatmapLayer, buildEventsGeoJSON]);
+  }, [displayedEvents, mapLoaded, updateEventsLayer, applyHeatmapLayer, buildEventsGeoJSON]);
 
   // Sync selected event camera fly-to
   useEffect(() => {
@@ -799,6 +843,22 @@ export default function MapViewer({
         </div>
 
         <div className="map-top-right">
+          {/* Scenario Selector Dropdown */}
+          <div className="scenario-selector-group">
+            <span className="scenario-label font-mono">SCENARIO:</span>
+            <select
+              className="scenario-select-dropdown font-mono"
+              value={activeScenarioId || "live_usgs"}
+              onChange={(e) => onSelectScenario?.(e.target.value)}
+              title="Select a disaster scenario or live USGS feed"
+            >
+              <option value="live_usgs">🌐 Live USGS Streaming Feed</option>
+              <option value="turkey_2023">🇹🇷 2023 Turkey M7.8 Doublet</option>
+              <option value="tokyo_bay">🇯🇵 Tokyo Bay Fault Swarm</option>
+              <option value="ridgecrest_2019">🇺🇸 2019 Ridgecrest Sequence</option>
+            </select>
+          </div>
+
           {/* Layer toggles */}
           <div className="layer-toggle-group">
             <button
@@ -901,6 +961,58 @@ export default function MapViewer({
           )}
         </aside>
       )}
+
+      {/* 72-Hour / Sequence Timeline Scrubber Bar */}
+      <div className="timeline-scrubber-bar">
+        <div className="timeline-controls-left">
+          <button
+            type="button"
+            className={`btn-timeline-play ${isPlayingTimeline ? "active" : ""}`}
+            onClick={() => {
+              if (timelinePercent >= 100) {
+                setTimelinePercent(0);
+              }
+              setIsPlayingTimeline((prev) => !prev);
+            }}
+            title={isPlayingTimeline ? "Pause sequence playback" : "Play earthquake sequence playback"}
+          >
+            {isPlayingTimeline ? "⏸ Pause" : "▶ Play Sequence"}
+          </button>
+          <button
+            type="button"
+            className="btn-timeline-reset"
+            onClick={() => {
+              setIsPlayingTimeline(false);
+              setTimelinePercent(100);
+            }}
+            title="Reset scrubber to latest"
+          >
+            ↺ Latest
+          </button>
+        </div>
+
+        <div className="timeline-slider-container">
+          <div className="timeline-labels-row font-mono text-xs">
+            <span>Sequence Origin (T-0)</span>
+            <span className="timeline-current-count font-bold text-cyan">
+              Showing {displayedEvents.length} of {sortedEvents.length} shocks ({timelinePercent.toFixed(0)}%)
+            </span>
+            <span>Latest (100%)</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value={timelinePercent}
+            onChange={(e) => {
+              setIsPlayingTimeline(false);
+              setTimelinePercent(parseFloat(e.target.value));
+            }}
+            className="styled-range timeline-range-slider"
+          />
+        </div>
+      </div>
 
       {/* Bottom Coordinates & Hint Chip */}
       <footer className="map-bottom-bar">

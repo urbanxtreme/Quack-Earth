@@ -393,3 +393,64 @@ def test_local_event_magnitude_validation(client):
     assert "magnitude must be between" in res.get_json()["error"]
 
 
+def test_risk_includes_verdict_and_guidance(client):
+    res = client.get("/risk?lat=34.05&lon=-118.25&radius_km=50&time_window=24h&min_magnitude=4.0")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert "verdict" in data
+    assert isinstance(data["verdict"], str)
+    assert len(data["verdict"]) > 10
+    assert "guidance" in data
+    assert "sectors" in data["guidance"]
+    assert "public_zone" in data
+    assert data["public_zone"] in ("usual", "stay aware", "limit work", "priority")
+    assert "excavation_action" in data
+
+
+def test_risk_verdict_endpoint(client):
+    res = client.get("/risk/verdict?lat=35.6762&lon=139.6503")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert "verdict" in data
+    assert "guidance" in data
+    assert "public_zone" in data
+    assert "excavation_action" in data
+    assert "probability_24h" in data
+
+
+def test_scenarios_endpoints(client):
+    res = client.get("/scenarios")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert "scenarios" in data
+    assert data["count"] >= 3
+    scenario_ids = [s["id"] for s in data["scenarios"]]
+    assert "turkey_2023" in scenario_ids
+    assert "tokyo_bay" in scenario_ids
+
+    # Detail endpoint
+    turkey_res = client.get("/scenarios/turkey_2023")
+    assert turkey_res.status_code == 200
+    turkey_data = turkey_res.get_json()
+    assert turkey_data["id"] == "turkey_2023"
+    assert len(turkey_data["events"]) > 0
+
+
+def test_event_corroboration_metadata(client):
+    client.post("/local-event", json={
+        "lat": 34.05,
+        "lon": -118.25,
+        "magnitude": 5.2,
+        "note": "Corroborated hit",
+    })
+    events_res = client.get("/events?hours=72&min_magnitude=2.0")
+    assert events_res.status_code == 200
+    events_data = events_res.get_json()["events"]
+    assert len(events_data) > 0
+    event = events_data[0]
+    assert "corroboration" in event
+    assert "status" in event["corroboration"]
+    assert "confidence" in event["corroboration"]
+
+
+

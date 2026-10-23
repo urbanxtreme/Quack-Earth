@@ -2207,3 +2207,789 @@ select.glass-input option {
     max-width: 100%;
   }
 }
+
+/* ==========================================================================
+   AI Civil Defense Directive Card & Zones
+   ========================================================================== */
+
+.civil-defense-directive-card {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.3s ease;
+}
+
+.civil-defense-directive-card.zone-priority {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(185, 28, 28, 0.32) 100%);
+  border-color: rgba(239, 68, 68, 0.55);
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.25);
+}
+
+.civil-defense-directive-card.zone-limit\ work,
+.civil-defense-directive-card[class*="zone-limit"] {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(194, 65, 12, 0.3) 100%);
+  border-color: rgba(249, 115, 22, 0.5);
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.2);
+}
+
+.civil-defense-directive-card.zone-stay\ aware,
+.civil-defense-directive-card[class*="zone-stay"] {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.18) 0%, rgba(14, 116, 144, 0.28) 100%);
+  border-color: rgba(6, 182, 212, 0.45);
+}
+
+.civil-defense-directive-card.zone-usual {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.24) 100%);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.directive-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.directive-icon-badge {
+  font-size: 1.4rem;
+}
+
+.directive-titles {
+  flex: 1;
+}
+
+.directive-tag {
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.directive-zone-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #fff;
+  margin: 0;
+}
+
+.zone-highlight {
+  color: var(--accent-cyan);
+}
+
+.excavation-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-size: 0.62rem;
+}
+
+.excavation-chip .chip-label {
+  font-size: 0.52rem;
+  opacity: 0.8;
+  letter-spacing: 0.05em;
+}
+
+.excavation-chip.action-pause {
+  background: rgba(239, 68, 68, 0.35);
+  border-color: rgba(239, 68, 68, 0.7);
+  color: #fee2e2;
+}
+
+.excavation-chip.action-open-area\ checks,
+.excavation-chip[class*="action-open-area"] {
+  background: rgba(234, 179, 8, 0.3);
+  border-color: rgba(234, 179, 8, 0.65);
+  color: #fef08a;
+}
+
+.excavation-chip.action-continue {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: rgba(16, 185, 129, 0.55);
+  color: #d1fae5;
+}
+
+.directive-verdict-text {
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #f1f5f9;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 10px 12px;
+  border-radius: var(--radius-xs);
+  border-left: 3px solid var(--accent-cyan);
+}
+
+.directive-authority-clause {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Ranked Emergency Sectors List
+   ========================================================================== */
+
+.sectors-card {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-top: 10px;
+}
+
+.sectors-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sectors-icon {
+  font-size: 1.1rem;
+}
+
+.sectors-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  flex: 1;
+  margin: 0;
+}
+
+.sectors-count {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+.sectors-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sector-item {
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sector-item.zone-priority {
+  border-left: 3px solid var(--hazard-critical);
+}
+
+.sector-item.zone-limit\ work {
+  border-left: 3px solid var(--hazard-high);
+}
+
+.sector-item.zone-stay\ aware {
+  border-left: 3px solid var(--accent-cyan);
+}
+
+.sector-item.zone-usual {
+  border-left: 3px solid var(--hazard-low);
+}
+
+.sector-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sector-place {
+  font-size: 0.8rem;
+  color: #e2e8f0;
+}
+
+.sector-zone-badge {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.sector-details-row {
+  display: flex;
+  gap: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.sector-action-text {
+  font-size: 0.74rem;
+  color: var(--text-dim);
+  margin-top: 5px;
+  line-height: 1.3;
+}
+
+/* ==========================================================================
+   Header Scenario Selector & SitRep CTA
+   ========================================================================== */
+
+.header-scenario-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-glass-bright);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.header-scenario-dropdown,
+.scenario-select-dropdown {
+  background: rgba(15, 23, 42, 0.85);
+  color: #f1f5f9;
+  border: 1px solid var(--border-glass);
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.header-scenario-dropdown:focus,
+.scenario-select-dropdown:focus {
+  border-color: var(--accent-cyan);
+}
+
+.scenario-selector-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scenario-label {
+  font-size: 0.65rem;
+  color: var(--accent-cyan);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.btn-sitrep-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25) 0%, rgba(14, 165, 233, 0.35) 100%);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #f0f9ff;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-sitrep-header:hover {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.4) 0%, rgba(14, 165, 233, 0.55) 100%);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+}
+
+.panel-actions-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-sitrep-export {
+  width: 100%;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(79, 70, 229, 0.35) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.55);
+  border-radius: var(--radius-sm);
+  color: #e0e7ff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-sitrep-export:hover {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.45) 0%, rgba(79, 70, 229, 0.55) 100%);
+  box-shadow: 0 0 18px rgba(99, 102, 241, 0.35);
+}
+
+/* ==========================================================================
+   Multimodal Corroboration Badges
+   ========================================================================== */
+
+.corroboration-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.corrob-badge {
+  font-size: 0.62rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.badge-usgs {
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
+}
+
+.badge-sensor {
+  background: rgba(139, 92, 246, 0.25);
+  border: 1px solid rgba(139, 92, 246, 0.55);
+  color: #c4b5fd;
+}
+
+.badge-crowd {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fcd34d;
+}
+
+/* ==========================================================================
+   72-Hour / Sequence Timeline Scrubber Bar
+   ========================================================================== */
+
+.timeline-scrubber-bar {
+  position: absolute;
+  bottom: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: 90%;
+  max-width: 680px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  background: rgba(11, 16, 28, 0.88);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-glass-bright);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.timeline-controls-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-timeline-play {
+  padding: 6px 12px;
+  border-radius: var(--radius-xs);
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.btn-timeline-play.active {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #ef4444;
+}
+
+.btn-timeline-reset {
+  padding: 6px 8px;
+  border-radius: var(--radius-xs);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.timeline-slider-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.timeline-labels-row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-dim);
+}
+
+.timeline-range-slider {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   Emergency Commander SitRep Modal & Print Styles
+   ========================================================================== */
+
+.sitrep-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.sitrep-modal-card {
+  width: 100%;
+  max-width: 860px;
+  max-height: 92vh;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sitrep-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: rgba(15, 23, 42, 0.95);
+  border-bottom: 1px solid var(--border-glass-bright);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.sitrep-badge-official {
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: #fca5a5;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.08em;
+}
+
+.sitrep-timestamp {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: 10px;
+}
+
+.sitrep-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-print-action {
+  padding: 6px 12px;
+  border-radius: var(--radius-xs);
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-geojson-action {
+  padding: 6px 12px;
+  border-radius: var(--radius-xs);
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  color: #6ee7b7;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-close-modal {
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid var(--border-glass);
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.sitrep-document {
+  padding: 32px 36px;
+  color: #f1f5f9;
+  font-family: inherit;
+}
+
+.doc-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.doc-emblem {
+  font-size: 2.4rem;
+}
+
+.doc-titles {
+  flex: 1;
+}
+
+.doc-main-title {
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  margin: 0;
+  color: #fff;
+}
+
+.doc-sub-title {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
+
+.doc-zone-stamp {
+  padding: 8px 14px;
+  border-radius: 6px;
+  text-align: center;
+  border: 2px solid;
+}
+
+.doc-zone-stamp.zone-priority {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.doc-zone-stamp.zone-limit\ work {
+  background: rgba(249, 115, 22, 0.25);
+  border-color: #f97316;
+  color: #f97316;
+}
+
+.doc-zone-stamp.zone-stay\ aware {
+  background: rgba(6, 182, 212, 0.25);
+  border-color: #06b6d4;
+  color: #06b6d4;
+}
+
+.doc-zone-stamp.zone-usual {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.doc-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-size: 0.78rem;
+}
+
+.sitrep-divider {
+  border: none;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 20px 0;
+}
+
+.sitrep-section {
+  margin-bottom: 24px;
+}
+
+.section-heading {
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--accent-cyan);
+  margin-bottom: 10px;
+}
+
+.sitrep-verdict-box {
+  padding: 14px 18px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 4px solid var(--accent-cyan);
+}
+
+.sitrep-verdict-box.zone-priority {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.verdict-lead-text {
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #f8fafc;
+}
+
+.verdict-limit-note {
+  margin-top: 10px;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+}
+
+.sitrep-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.stat-card {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #38bdf8;
+}
+
+.sitrep-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  margin-top: 6px;
+}
+
+.sitrep-table th {
+  text-align: left;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-muted);
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.sitrep-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sitrep-doc-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.2);
+}
+
+.sig-line {
+  width: 200px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+  margin-bottom: 6px;
+}
+
+.footer-sig-box span {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.footer-doc-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.64rem;
+  color: var(--text-dim);
+  text-align: right;
+}
+
+/* Print Specific Rules */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .sitrep-modal-backdrop,
+  .sitrep-modal-backdrop * {
+    visibility: visible;
+  }
+
+  .sitrep-modal-backdrop {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: #ffffff !important;
+    padding: 0;
+  }
+
+  .sitrep-modal-card {
+    max-width: 100%;
+    border: none;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none;
+  }
+
+  .sitrep-document {
+    padding: 20px;
+    color: #000000 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .doc-main-title {
+    color: #000000 !important;
+  }
+
+  .doc-sub-title,
+  .doc-meta-grid,
+  .stat-card,
+  .sitrep-table td,
+  .sitrep-table th,
+  .verdict-lead-text,
+  .section-heading {
+    color: #111827 !important;
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+  }
+}

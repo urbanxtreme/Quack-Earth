@@ -126,6 +126,75 @@ def calculate_risk():
         return error("Risk engine failed", 500)
 
 
+@risk_bp.get("/risk/verdict")
+def get_risk_verdict():
+    """Get the Civil Defense Situation Verdict and Emergency Guidance."""
+    lat_val = request.args.get("lat")
+    lon_val = request.args.get("lon")
+    time_window = request.args.get("time_window", "24h")
+    min_mag_val = request.args.get("min_magnitude")
+
+    try:
+        min_magnitude = float(min_mag_val) if min_mag_val is not None else 4.0
+    except (ValueError, TypeError):
+        return error("min_magnitude must be a number", 400)
+
+    if lat_val is not None and lon_val is not None:
+        try:
+            lat = float(lat_val)
+            lon = float(lon_val)
+        except (ValueError, TypeError):
+            return error("lat and lon must be numbers", 400)
+        if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+            return error("latitude and longitude out of range", 422)
+
+        risk_service = current_app.extensions["risk_service"]
+        res = risk_service.calculate_risk(lat=lat, lon=lon, time_window=time_window, min_magnitude=min_magnitude)
+        return {
+            "verdict": res.get("verdict"),
+            "guidance": res.get("guidance"),
+            "public_zone": res.get("public_zone"),
+            "excavation_action": res.get("excavation_action"),
+            "probability_24h": res.get("zones", [{}])[0].get("probability_24h", 0.0),
+            "as_of": res.get("generated_at"),
+            "center": {"lat": lat, "lon": lon},
+        }, 200
+
+    min_lat_val = request.args.get("min_lat")
+    max_lat_val = request.args.get("max_lat")
+    min_lon_val = request.args.get("min_lon")
+    max_lon_val = request.args.get("max_lon")
+    if all(v is not None for v in (min_lat_val, max_lat_val, min_lon_val, max_lon_val)):
+        try:
+            min_lat = float(min_lat_val)
+            max_lat = float(max_lat_val)
+            min_lon = float(min_lon_val)
+            max_lon = float(max_lon_val)
+            resolution = float(request.args.get("resolution", 0.2))
+        except (ValueError, TypeError):
+            return error("Bounding box coordinates must be numbers", 400)
+
+        risk_service = current_app.extensions["risk_service"]
+        res = risk_service.calculate_grid(
+            min_lat=min_lat,
+            max_lat=max_lat,
+            min_lon=min_lon,
+            max_lon=max_lon,
+            resolution=resolution,
+            time_window=time_window,
+            min_magnitude=min_magnitude,
+        )
+        return {
+            "verdict": res.get("verdict"),
+            "guidance": res.get("guidance"),
+            "public_zone": res.get("public_zone"),
+            "excavation_action": res.get("excavation_action"),
+            "as_of": res.get("guidance", {}).get("as_of"),
+        }, 200
+
+    return error("Either lat/lon or min_lat/max_lat/min_lon/max_lon are required", 400)
+
+
 @risk_bp.get("/risk/grid")
 def calculate_grid():
     min_lat_val = request.args.get("min_lat")

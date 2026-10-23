@@ -192,6 +192,24 @@ export default function EventsPanel({
                         {event.source === "user_report" ? "Local" : "USGS"}
                       </span>
                     </div>
+
+                    <div className="corroboration-tag-row">
+                      {(!event.corroboration || event.corroboration.status === "usgs_verified") && (
+                        <span className="corrob-badge badge-usgs font-mono">
+                          ✓ USGS Verified
+                        </span>
+                      )}
+                      {event.corroboration?.status === "sensor_corroborated" && (
+                        <span className="corrob-badge badge-sensor font-mono">
+                          ⚡ Corroborated Sensor
+                        </span>
+                      )}
+                      {event.corroboration?.status === "crowd_report" && (
+                        <span className="corrob-badge badge-crowd font-mono">
+                          👥 Citizen Report
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="event-action-arrow">→</div>

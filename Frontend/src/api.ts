@@ -18,6 +18,39 @@ export interface RiskZone {
   risk_score: number;
   relative_to_baseline: number;
   expected_events: number;
+  risk_level?: string;
+  probability_24h?: number;
+  probability_7d?: number;
+  public_zone?: string;
+}
+
+export interface SectorGuidance {
+  lat: number;
+  lon: number;
+  probability_24h: number;
+  public_zone: string;
+  probability_m5_24h?: number;
+  probability_m6_24h?: number;
+  direction: string;
+  distance_km: number;
+  place: string;
+  action: string;
+  excavation: string;
+  cells?: number;
+}
+
+export interface GuidanceData {
+  as_of: string;
+  peak: {
+    lat: number;
+    lon: number;
+    probability_24h: number;
+    public_zone: string;
+    probability_m5_24h?: number;
+    probability_m6_24h?: number;
+  };
+  limit: string;
+  sectors: SectorGuidance[];
 }
 
 export interface RiskResponse {
@@ -27,6 +60,17 @@ export interface RiskResponse {
   baseline_rate: number;
   zones: RiskZone[];
   generated_at: string;
+  verdict?: string;
+  guidance?: GuidanceData;
+  public_zone?: string;
+  excavation_action?: string;
+}
+
+export interface EventCorroboration {
+  status: 'usgs_verified' | 'sensor_corroborated' | 'crowd_report' | string;
+  label: string;
+  confidence: number;
+  station_count?: number;
 }
 
 export interface EarthquakeEvent {
@@ -39,6 +83,27 @@ export interface EarthquakeEvent {
   source?: string;
   place?: string;
   note?: string;
+  corroboration?: EventCorroboration;
+}
+
+export interface ScenarioItem {
+  id: string;
+  name: string;
+  short_name: string;
+  tag: string;
+  tag_color: string;
+  center: { lat: number; lon: number };
+  zoom: number;
+  description: string;
+  incident_date: string;
+  peak_magnitude: number;
+  event_count?: number;
+  events?: EarthquakeEvent[];
+}
+
+export interface ScenariosResponse {
+  count: number;
+  scenarios: ScenarioItem[];
 }
 
 export interface EventsResponse {
@@ -208,3 +273,63 @@ export async function getRiskGrid(params: {
   }
   return await res.json();
 }
+
+/**
+ * Fetch list of emergency scenario presets
+ */
+export async function getScenarios(): Promise<ScenariosResponse> {
+  const res = await fetch(`${API_BASE}/scenarios`, { signal: AbortSignal.timeout(6000) });
+  if (!res.ok) {
+    throw new Error(`Scenarios fetch failed with HTTP ${res.status}`);
+  }
+  return await res.json();
+}
+
+/**
+ * Fetch full scenario details including timeline events
+ */
+export async function getScenarioDetails(scenarioId: string): Promise<ScenarioItem> {
+  const res = await fetch(`${API_BASE}/scenarios/${encodeURIComponent(scenarioId)}`, { signal: AbortSignal.timeout(6000) });
+  if (!res.ok) {
+    throw new Error(`Scenario details fetch failed with HTTP ${res.status}`);
+  }
+  return await res.json();
+}
+
+/**
+ * Fetch civil-defense situation verdict
+ */
+export async function getRiskVerdict(params: {
+  lat?: number;
+  lon?: number;
+  min_lat?: number;
+  max_lat?: number;
+  min_lon?: number;
+  max_lon?: number;
+  time_window?: '24h' | '7d';
+  min_magnitude?: number;
+}): Promise<{
+  verdict: string;
+  guidance: GuidanceData;
+  public_zone: string;
+  excavation_action: string;
+  probability_24h?: number;
+  as_of?: string;
+}> {
+  const query = new URLSearchParams();
+  if (params.lat !== undefined) query.set("lat", params.lat.toString());
+  if (params.lon !== undefined) query.set("lon", params.lon.toString());
+  if (params.min_lat !== undefined) query.set("min_lat", params.min_lat.toString());
+  if (params.max_lat !== undefined) query.set("max_lat", params.max_lat.toString());
+  if (params.min_lon !== undefined) query.set("min_lon", params.min_lon.toString());
+  if (params.max_lon !== undefined) query.set("max_lon", params.max_lon.toString());
+  if (params.time_window) query.set("time_window", params.time_window);
+  if (params.min_magnitude !== undefined) query.set("min_magnitude", params.min_magnitude.toString());
+
+  const res = await fetch(`${API_BASE}/risk/verdict?${query.toString()}`, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) {
+    throw new Error(`Risk verdict fetch failed with HTTP ${res.status}`);
+  }
+  return await res.json();
+}
+

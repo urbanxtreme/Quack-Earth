@@ -24,6 +24,96 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+
+# Ensure model module path is resolvable
+_MODEL_DIR = str(Path(__file__).resolve().parents[3] / "model")
+if _MODEL_DIR not in sys.path:
+    sys.path.insert(0, _MODEL_DIR)
+
+
+def generate_verdict_and_guidance(
+    df: pd.DataFrame,
+    as_of_iso: str,
+    min_magnitude: float = 4.0,
+) -> dict:
+    """Generate Civil Defense Situation Verdict and Sector Commander Guidance."""
+    try:
+        from quack_risk.guidance import attach_public_zone, build_guidance
+        from quack_risk.outlook import attach_outlook
+        from quack_risk.verdict import render_verdict
+
+        df_work = df.copy()
+        if "probability_m5_24h" not in df_work.columns or "probability_m6_24h" not in df_work.columns:
+            df_work = attach_outlook(df_work, magnitude_threshold=min_magnitude)
+        if "public_zone" not in df_work.columns:
+            df_work = attach_public_zone(df_work)
+
+        verdict = render_verdict(df_work)
+        guidance = build_guidance(df_work, as_of=as_of_iso)
+        peak_zone = str(guidance.get("peak", {}).get("public_zone", "usual"))
+        excavation = guidance["sectors"][0]["excavation"] if guidance.get("sectors") else "continue"
+        return {
+            "verdict": verdict,
+            "guidance": guidance,
+            "public_zone": peak_zone,
+            "excavation_action": excavation,
+        }
+    except Exception:
+        # High reliability fallback
+        peak_row = df.loc[df["probability_24h"].idxmax()] if not df.empty else None
+        prob_24h = float(peak_row["probability_24h"]) if peak_row is not None else 0.0
+        if prob_24h >= 0.15:
+            zone = "priority"
+            excavation = "pause"
+            action = "Search and rescue first. Pause excavation and stop debris removal in this sector."
+        elif prob_24h >= 0.05:
+            zone = "limit work"
+            excavation = "pause"
+            action = "Pause excavation and debris removal. Stay out of damaged buildings."
+        elif prob_24h >= 0.01:
+            zone = "stay aware"
+            excavation = "open-area checks"
+            action = "Open-area checks can continue. This chance alone does not call for a wide evacuation."
+        else:
+            zone = "usual"
+            excavation = "continue"
+            action = "No extra short-term action follows from this chance alone."
+
+        pct = f"{prob_24h * 100:.1f}%"
+        verdict = (
+            f"In the next 24 hours the highest cell has about a {pct} chance of a magnitude 4 or larger earthquake. "
+            f"{action} A field commander decides any evacuation."
+        )
+        return {
+            "verdict": verdict,
+            "guidance": {
+                "as_of": as_of_iso,
+                "peak": {
+                    "lat": float(peak_row["lat"]) if peak_row is not None else 0.0,
+                    "lon": float(peak_row["lon"]) if peak_row is not None else 0.0,
+                    "probability_24h": round(prob_24h, 4),
+                    "public_zone": zone,
+                },
+                "limit": "This is the aftershock chance for the next 24 hours. A field commander decides evacuation.",
+                "sectors": [
+                    {
+                        "lat": float(peak_row["lat"]) if peak_row is not None else 0.0,
+                        "lon": float(peak_row["lon"]) if peak_row is not None else 0.0,
+                        "probability_24h": round(prob_24h, 4),
+                        "public_zone": zone,
+                        "direction": "at the peak",
+                        "distance_km": 0.0,
+                        "place": "at the peak",
+                        "action": action,
+                        "excavation": excavation,
+                        "cells": len(df),
+                    }
+                ],
+            },
+            "public_zone": zone,
+            "excavation_action": excavation,
+        }
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -83,6 +173,18 @@ class RiskService:
         all_events = self.repository.list_events(limit=10000)
 
         if not all_events:
+            empty_df = pd.DataFrame([{
+                "lat": lat,
+                "lon": lon,
+                "total_rate": 0.0,
+                "probability_24h": 0.0,
+                "probability_7d": 0.0,
+            }])
+            verdict_bundle = generate_verdict_and_guidance(
+                empty_df,
+                as_of_iso=now.isoformat().replace("+00:00", "Z"),
+                min_magnitude=min_magnitude,
+            )
             return {
                 "time_window": time_window,
                 "min_magnitude": min_magnitude,
@@ -96,8 +198,15 @@ class RiskService:
                         "relative_to_baseline": 1.0,
                         "expected_events": 0.0,
                         "risk_level": "low",
+                        "probability_24h": 0.0,
+                        "probability_7d": 0.0,
+                        "public_zone": "usual",
                     }
                 ],
+                "verdict": verdict_bundle["verdict"],
+                "guidance": verdict_bundle["guidance"],
+                "public_zone": verdict_bundle["public_zone"],
+                "excavation_action": verdict_bundle["excavation_action"],
                 "generated_at": now.isoformat().replace("+00:00", "Z"),
             }
 
@@ -162,6 +271,22 @@ class RiskService:
             score = 1.0 - (1.0 / (1.0 + (rel / 3.5) ** 1.2))
             risk_score = round(min(1.0, max(0.0, score)), 2)
 
+        p_24h = min(1.0, max(0.0, 1.0 - math.exp(-total_rate * 1.0)))
+        p_7d = min(1.0, max(0.0, 1.0 - math.exp(-total_rate * 7.0)))
+
+        df_point = pd.DataFrame([{
+            "lat": lat,
+            "lon": lon,
+            "total_rate": max(0.0, total_rate),
+            "probability_24h": p_24h,
+            "probability_7d": p_7d,
+        }])
+        verdict_bundle = generate_verdict_and_guidance(
+            df_point,
+            as_of_iso=now.isoformat().replace("+00:00", "Z"),
+            min_magnitude=min_magnitude,
+        )
+
         return {
             "time_window": time_window,
             "min_magnitude": min_magnitude,
@@ -175,8 +300,15 @@ class RiskService:
                     "relative_to_baseline": relative_to_baseline,
                     "expected_events": expected_events,
                     "risk_level": risk_level,
+                    "probability_24h": round(p_24h, 4),
+                    "probability_7d": round(p_7d, 4),
+                    "public_zone": verdict_bundle["public_zone"],
                 }
             ],
+            "verdict": verdict_bundle["verdict"],
+            "guidance": verdict_bundle["guidance"],
+            "public_zone": verdict_bundle["public_zone"],
+            "excavation_action": verdict_bundle["excavation_action"],
             "generated_at": now.isoformat().replace("+00:00", "Z"),
         }
 
@@ -259,6 +391,12 @@ class RiskService:
                         local_signals=sig_df,
                     )
 
+                    verdict_bundle = generate_verdict_and_guidance(
+                        df_scored,
+                        as_of_iso=ref_time.isoformat().replace("+00:00", "Z"),
+                        min_magnitude=min_magnitude,
+                    )
+
                     grid_cells = []
                     for _, row in df_scored.iterrows():
                         prob = float(row["probability_24h"] if time_window == "24h" else row["probability_7d"])
@@ -269,11 +407,17 @@ class RiskService:
                             "risk_score": round(min(1.0, max(0.0, prob)), 2),
                             "risk_level": str(row["risk_level"]),
                             "relative_risk": round(rel, 1),
+                            "probability_24h": round(float(row["probability_24h"]), 4),
+                            "probability_7d": round(float(row["probability_7d"]), 4),
                         })
 
                     return {
                         "time_window": time_window,
                         "grid": grid_cells,
+                        "verdict": verdict_bundle["verdict"],
+                        "guidance": verdict_bundle["guidance"],
+                        "public_zone": verdict_bundle["public_zone"],
+                        "excavation_action": verdict_bundle["excavation_action"],
                     }
             except Exception:
                 # Seamless fallback to robust vectorized numpy engine
@@ -359,15 +503,36 @@ class RiskService:
                     score = 1.0 - (1.0 / (1.0 + (relative / 3.5) ** 1.2))
                     risk_score = round(float(np.clip(score, 0.0, 1.0)), 2)
 
+                p_24h = min(1.0, max(0.0, 1.0 - math.exp(-total_rate * 1.0)))
+                p_7d = min(1.0, max(0.0, 1.0 - math.exp(-total_rate * 7.0)))
+
                 grid_cells.append({
                     "lat": round(float(glat), 4),
                     "lon": round(float(glon), 4),
                     "risk_score": risk_score,
                     "risk_level": risk_level,
                     "relative_risk": round(float(relative), 1),
+                    "total_rate": round(float(total_rate), 5),
+                    "probability_24h": round(float(p_24h), 4),
+                    "probability_7d": round(float(p_7d), 4),
                 })
+
+        df_grid = (
+            pd.DataFrame(grid_cells)
+            if grid_cells
+            else pd.DataFrame([{"lat": min_lat, "lon": min_lon, "total_rate": 0.0, "probability_24h": 0.0, "probability_7d": 0.0}])
+        )
+        verdict_bundle = generate_verdict_and_guidance(
+            df_grid,
+            as_of_iso=ref_time.isoformat().replace("+00:00", "Z"),
+            min_magnitude=min_magnitude,
+        )
 
         return {
             "time_window": time_window,
             "grid": grid_cells,
+            "verdict": verdict_bundle["verdict"],
+            "guidance": verdict_bundle["guidance"],
+            "public_zone": verdict_bundle["public_zone"],
+            "excavation_action": verdict_bundle["excavation_action"],
         }
