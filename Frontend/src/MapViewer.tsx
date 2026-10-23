@@ -26,6 +26,33 @@ interface HeatmapStats {
   centerLon: number;
 }
 
+interface MapEventProperties {
+  id: string;
+  time: string;
+  lat: number;
+  lon: number;
+  magnitude: number | null;
+  depth_km?: number;
+  source: string;
+}
+
+interface MapEventFeature {
+  type: "Feature";
+  id?: string;
+  geometry: {
+    type: "Point";
+    coordinates: [number, number];
+  };
+  properties: MapEventProperties;
+}
+
+interface MapEventsResponse {
+  type: "FeatureCollection";
+  features: MapEventFeature[];
+  count: number;
+  data_as_of: string | null;
+}
+
 // Proxied through Vite dev server to guarantee 100% CORS & HTTP Range support on any local port
 const getPmtilesUrl = () => {
   if (typeof window !== "undefined") {
@@ -121,6 +148,7 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const centerMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const eventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const currentHeatmapDataRef = useRef<FeatureCollection | null>(null);
 
   const [mapLoaded, setMapLoaded] = useState<boolean>(false);
@@ -130,8 +158,12 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
   const [searchInput, setSearchInput] = useState<string>(initialPlace || "");
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [activeLocation, setActiveLocation] = useState<GeocodedLocation | null>(null);
   const [heatmapStats, setHeatmapStats] = useState<HeatmapStats | null>(null);
+  const [eventMarkerCount, setEventMarkerCount] = useState<number>(0);
+  const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(false);
 
   const [viewportInfo, setViewportInfo] = useState<{ lng: string; lat: string; zoom: string }>({
     lng: "0.00",
@@ -220,6 +252,69 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
         "heatmap-opacity": 0.82,
       },
     });
+  }, []);
+
+  const loadEarthquakeMarkers = useCallback(async () => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const bounds = map.getBounds();
+    const params = new URLSearchParams({
+      min_lat: bounds.getSouth().toString(),
+      max_lat: bounds.getNorth().toString(),
+      min_lon: bounds.getWest().toString(),
+      max_lon: bounds.getEast().toString(),
+      hours: "168",
+      min_magnitude: "2.5",
+      limit: "500",
+    });
+
+    setIsLoadingEvents(true);
+    try {
+      const response = await fetch(`/api/v1/map/events?${params.toString()}`);
+      const data = (await response.json()) as MapEventsResponse;
+      if (!response.ok) {
+        throw new Error("Unable to load earthquake markers");
+      }
+
+      eventMarkersRef.current.forEach((marker) => marker.remove());
+      eventMarkersRef.current = data.features.map((feature) => {
+        const magnitude = feature.properties.magnitude ?? 0;
+        const size = Math.max(10, Math.min(28, 10 + magnitude * 2));
+        const markerElement = document.createElement("div");
+        markerElement.className = "earthquake-marker";
+        markerElement.style.width = `${size}px`;
+        markerElement.style.height = `${size}px`;
+        markerElement.style.backgroundColor = magnitude >= 5
+          ? "var(--heat-red)"
+          : magnitude >= 4
+            ? "var(--heat-orange)"
+            : "var(--heat-yellow)";
+
+        const popupContent = document.createElement("div");
+        popupContent.className = "earthquake-popup";
+        const title = document.createElement("strong");
+        title.textContent = `Magnitude ${magnitude.toFixed(1)}`;
+        const details = document.createElement("p");
+        details.textContent = [
+          new Date(feature.properties.time).toLocaleString(),
+          `Depth: ${feature.properties.depth_km?.toFixed(1) ?? "—"} km`,
+          `Source: ${feature.properties.source}`,
+        ].join(" · ");
+        popupContent.append(title, details);
+
+        return new maplibregl.Marker({ element: markerElement })
+          .setLngLat(feature.geometry.coordinates)
+          .setPopup(new maplibregl.Popup({ offset: 12 }).setDOMContent(popupContent))
+          .addTo(map);
+      });
+      setEventMarkerCount(data.count);
+    } catch (error: unknown) {
+      console.warn("Could not load earthquake markers:", error);
+      setEventMarkerCount(0);
+    } finally {
+      setIsLoadingEvents(false);
+    }
   }, []);
 
   // Main function: geocode location, center map, and create single heatmap around it
@@ -341,6 +436,7 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
       map.on("load", () => {
         setMapLoaded(true);
         map.resize();
+        void loadEarthquakeMarkers();
 
         // If an initial place was passed or provided, generate heatmap immediately
         if (initialPlace) {
@@ -377,6 +473,9 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
           lat: center.lat.toFixed(2),
           zoom: zoom.toFixed(1),
         });
+        map.on("moveend", () => {
+          void loadEarthquakeMarkers();
+        });
       });
 
       mapRef.current = map;
@@ -394,6 +493,8 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
         if (centerMarkerRef.current) {
           centerMarkerRef.current.remove();
         }
+        eventMarkersRef.current.forEach((marker) => marker.remove());
+        eventMarkersRef.current = [];
         map.remove();
         mapRef.current = null;
         maplibregl.removeProtocol("pmtiles");
@@ -402,7 +503,7 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
       console.error("Failed to initialize map:", err);
       setLoadError(err instanceof Error ? err.message : "Failed to initialize map");
     }
-  }, []);
+  }, [activeTheme, applyHeatmapLayer, handleGenerateHeatmap, initialPlace, loadEarthquakeMarkers]);
 
   // Update theme dynamically
   const switchTheme = (theme: "light" | "dark" | "grayscale") => {
@@ -415,6 +516,38 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
   const handleResetView = () => {
     if (mapRef.current) {
       mapRef.current.flyTo({ center: [0, 20], zoom: 2.5, essential: true });
+    }
+  };
+
+  const handleSyncCatalog = async () => {
+    setIsSyncing(true);
+    setSearchFeedback("Synchronizing earthquake data with USGS...");
+    try {
+      const response = await fetch("/api/v1/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days_back: 30, min_magnitude: 2.5 }),
+      });
+      const data = (await response.json()) as {
+        last_catalog_update?: string;
+        data_as_of?: string;
+        message?: string;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.message || data.error || "Catalog synchronization failed");
+      }
+      const syncedAt = data.last_catalog_update || data.data_as_of || new Date().toISOString();
+      setLastSyncTime(syncedAt);
+      setSearchFeedback(
+        `USGS catalog synchronized${data.message ? `: ${data.message}` : ""}`,
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Catalog synchronization failed";
+      setSearchFeedback(`${message}. Existing cached data was preserved.`);
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSearchFeedback(null), 5000);
     }
   };
 
@@ -531,6 +664,15 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
           <button className="btn-secondary" onClick={handleResetView} title="Reset camera to world overview">
             Reset View
           </button>
+          <button
+            className="btn-sync"
+            onClick={() => void handleSyncCatalog()}
+            disabled={isSyncing}
+            title="Download the latest earthquake catalog from USGS"
+          >
+            {isSyncing ? <span className="btn-spinner" /> : "↻"}{" "}
+            {isSyncing ? "Syncing..." : "Sync USGS"}
+          </button>
         </div>
       </header>
 
@@ -566,10 +708,15 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
               <span className="metric-lbl">Gradient</span>
             </div>
             <div className="metric-item">
-              <span className="metric-val">Auto</span>
-              <span className="metric-lbl">Zoom Radius</span>
+              <span className="metric-val">{isLoadingEvents ? "..." : eventMarkerCount}</span>
+              <span className="metric-lbl">Earthquakes Shown</span>
             </div>
           </div>
+          {lastSyncTime && (
+            <p className="heatmap-sync-time">
+              Catalog synced: {new Date(lastSyncTime).toLocaleString()}
+            </p>
+          )}
         </aside>
       )}
 
