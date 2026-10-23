@@ -115,6 +115,28 @@ The same run writes `<grid>_guidance.json` and `<grid>_verdict.txt` beside the C
 
 Rates are expected events per day in that cell at or above `M_c` (default 4.0). `risk_level` is `low` below 1.5, `moderate` below 3, `elevated` below 10, and `high` at 10 or above, using relative risk (`total_rate / baseline_rate`). Color the map from `total_rate` or `probability_24h`. After a mainshock the relative risk stays above 10 well past the bright core, because the long-term baseline is small. The bright core is the cells whose `total_rate` is at least 30% of the peak. Brief residents and rescue leads from `public_zone`, not from `risk_level`.
 
+`probability_24h` is the chance of at least one magnitude 4 or larger earthquake in that cell during the next 24 hours. It is not a clock time, and it is not one predicted magnitude. `probability_m5_24h` and `probability_m6_24h` are the same chance for magnitude 5 and magnitude 6.
+
+## Handoff
+
+`score_grid` and the column order above are frozen. The map reads the CSV. This folder does not draw the map.
+
+These two grids are the 7 February 2023 sequence, about 24 hours after the magnitude 7.8. The second adds one phone about 25 km north of that epicenter, at 37.45°N, 37.01°E, so the nearby cells can rise while the network is down. Both commands use fitted `K`, `c`, and `p` when `data/cache/params.json` is present.
+
+```bash
+python model/scripts/run_score.py --catalog data/cache/catalog.csv --as-of 2023-02-07T00:00:00Z --bounds 35 34 41 41 --resolution 0.2 --out outputs/grids/demo_20230207.csv
+python model/scripts/run_score.py --catalog data/cache/catalog.csv --signals data/fixtures/handoff_signal.json --as-of 2023-02-07T00:00:00Z --bounds 35 34 41 41 --resolution 0.2 --out outputs/grids/demo_20230207_signal.csv
+python model/scripts/run_eval.py
+```
+
+The map should read `outputs/grids/demo_20230207.csv` (or the signal file beside it). The columns are the same ones as `risk_grid.csv`. `demo_20230207_guidance.json` and `demo_20230207_verdict.txt` are the plain-language note for the same run.
+
+This engine is for the days after a large earthquake that is already in the catalog. It does not warn of a spontaneous mainshock far from recent activity. A lower magnitude cutoff, or a catalog that is missing earthquakes, changes the baseline and the chance.
+
+## What stays with the other roles
+
+The live USGS poller and the map stay outside this folder. Backend can replace `data/cache/catalog.csv` with the same columns. Run the score command again when that file, or the signal file, changes.
+
 ## Starting parameters
 
 `RiskParams` in `quack_risk/config.py`:
@@ -145,6 +167,4 @@ python model/scripts/run_eval.py
 
 `run_eval.py` writes four figures in `outputs/plots/`: `omori_decay.png`, `risk_snapshot_24h.png`, `capture_curve.png`, and `likelihood_bars.png`, plus `metrics.json`. The logistic residual stays off.
 
-## What is not in this phase
 
-No USGS download, no parameter fitting, no plots, and no map. `data/cache/` is the drop zone for the backend catalog. Point `--catalog` at it when the columns above are present. Local signals go in `--signals`. A new catalog row or a new signal file is picked up by running the scorer again.
