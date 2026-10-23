@@ -99,17 +99,15 @@ def events():
 
         records = repository.list_events(start=start, end=end, min_magnitude=min_magnitude, limit=limit)
 
-        # Fall back to looking back from the newest event if catalog is historical/offline demo
-        if not records:
-            all_cached = repository.list_events(min_magnitude=min_magnitude, limit=limit)
-            if all_cached:
-                latest_origin = max(e.origin_time for e in all_cached)
-                if (now - latest_origin).days > 30 and not (request.args.get("start") or request.args.get("end")):
-                    hist_start = latest_origin - timedelta(hours=hours)
-                    hist_end = latest_origin + timedelta(hours=1)
-                    records = repository.list_events(
-                        start=hist_start, end=hist_end, min_magnitude=min_magnitude, limit=limit
-                    )
+        # If no events exist in the requested window, query live from USGS if available
+        if not records and not (request.args.get("start") or request.args.get("end")):
+            catalog_service = current_app.extensions.get("catalog_service")
+            if catalog_service:
+                try:
+                    catalog_service.refresh(min_magnitude=min_magnitude, days_back=max(1, int(hours / 24) + 1))
+                    records = repository.list_events(start=start, end=end, min_magnitude=min_magnitude, limit=limit)
+                except Exception:
+                    pass
 
         event_list = [event.to_dict() for event in records]
 

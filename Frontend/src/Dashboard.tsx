@@ -257,6 +257,11 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
             }}
             onMapClick={handleMapClick}
             targetCoords={inspectedCoords}
+            onSyncSuccess={() => {
+              loadEvents();
+              loadStatus();
+              loadRisk();
+            }}
           />
         </div>
 

@@ -18,6 +18,7 @@ export interface MapViewerProps {
   onSelectEvent?: (event: EarthquakeEvent) => void;
   onMapClick?: (coords: { lat: number; lon: number }) => void;
   targetCoords?: { lat: number; lon: number; label?: string } | null;
+  onSyncSuccess?: () => void;
 }
 
 interface GeocodedLocation {
@@ -30,33 +31,6 @@ interface HeatmapStats {
   locationName: string;
   centerLat: number;
   centerLon: number;
-}
-
-interface MapEventProperties {
-  id: string;
-  time: string;
-  lat: number;
-  lon: number;
-  magnitude: number | null;
-  depth_km?: number;
-  source: string;
-}
-
-interface MapEventFeature {
-  type: "Feature";
-  id?: string;
-  geometry: {
-    type: "Point";
-    coordinates: [number, number];
-  };
-  properties: MapEventProperties;
-}
-
-interface MapEventsResponse {
-  type: "FeatureCollection";
-  features: MapEventFeature[];
-  count: number;
-  data_as_of: string | null;
 }
 
 // Proxied through Vite dev server to guarantee 100% CORS & HTTP Range support on any local port
@@ -158,12 +132,12 @@ export default function MapViewer({
   onSelectEvent,
   onMapClick,
   targetCoords,
+  onSyncSuccess,
 }: MapViewerProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const centerMarkerRef = useRef<maplibregl.Marker | null>(null);
   const clickMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const eventMarkersRef = useRef<maplibregl.Marker[]>([]);
   const currentHeatmapDataRef = useRef<FeatureCollection | null>(null);
 
   const [mapLoaded, setMapLoaded] = useState<boolean>(false);
@@ -177,8 +151,6 @@ export default function MapViewer({
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [activeLocation, setActiveLocation] = useState<GeocodedLocation | null>(null);
   const [heatmapStats, setHeatmapStats] = useState<HeatmapStats | null>(null);
-  const [eventMarkerCount, setEventMarkerCount] = useState<number>(0);
-  const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(false);
   const [showEventsLayer, setShowEventsLayer] = useState<boolean>(true);
   const [showHeatmapLayer, setShowHeatmapLayer] = useState<boolean>(true);
 
@@ -458,23 +430,8 @@ export default function MapViewer({
         centerMarkerRef.current = marker;
       }
 
-      // Single feature: exactly ONE point at the place center
-      const geojson: FeatureCollection = {
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            properties: {
-              mag: 6.0,
-            },
-            geometry: {
-              type: "Point",
-              coordinates: [location.lon, location.lat],
-            },
-          },
-        ],
-      };
-
+      // Generate heatmap directly from real live earthquake events from USGS
+      const geojson = buildEventsGeoJSON(events);
       applyHeatmapLayer(geojson);
 
       setHeatmapStats({
@@ -615,12 +572,15 @@ export default function MapViewer({
     }
   }, [activeTheme, applyHeatmapLayer, handleGenerateHeatmap, initialPlace]);
 
-  // Sync events layer when events prop changes
+  // Sync events and heatmap layer when events prop changes from USGS
   useEffect(() => {
     if (mapLoaded && mapRef.current) {
       updateEventsLayer(events);
+      if (events.length > 0) {
+        applyHeatmapLayer(buildEventsGeoJSON(events));
+      }
     }
-  }, [events, mapLoaded, updateEventsLayer]);
+  }, [events, mapLoaded, updateEventsLayer, applyHeatmapLayer, buildEventsGeoJSON]);
 
   // Sync selected event camera fly-to
   useEffect(() => {
@@ -706,14 +666,16 @@ export default function MapViewer({
 
   const handleSyncCatalog = async () => {
     setIsSyncing(true);
-    setSearchFeedback("Synchronizing earthquake data with USGS...");
+    setSearchFeedback("Downloading live earthquake data from USGS...");
     try {
-      const response = await fetch("/api/v1/sync", {
+      const response = await fetch("/api/refresh-catalog", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ days_back: 30, min_magnitude: 2.5 }),
       });
       const data = (await response.json()) as {
+        status?: string;
+        events_fetched?: number;
         last_catalog_update?: string;
         data_as_of?: string;
         message?: string;
@@ -724,9 +686,12 @@ export default function MapViewer({
       }
       const syncedAt = data.last_catalog_update || data.data_as_of || new Date().toISOString();
       setLastSyncTime(syncedAt);
-      setSearchFeedback(
-        `USGS catalog synchronized${data.message ? `: ${data.message}` : ""}`,
-      );
+      const countInfo = data.events_fetched !== undefined ? ` (+${data.events_fetched} live quakes)` : "";
+      setSearchFeedback(`Live USGS catalog synchronized${countInfo}`);
+
+      if (onSyncSuccess) {
+        onSyncSuccess();
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Catalog synchronization failed";
       setSearchFeedback(`${message}. Existing cached data was preserved.`);
@@ -875,16 +840,7 @@ export default function MapViewer({
             className="btn-sync"
             onClick={() => void handleSyncCatalog()}
             disabled={isSyncing}
-            title="Download the latest earthquake catalog from USGS"
-          >
-            {isSyncing ? <span className="btn-spinner" /> : "↻"}{" "}
-            {isSyncing ? "Syncing..." : "Sync USGS"}
-          </button>
-          <button
-            className="btn-sync"
-            onClick={() => void handleSyncCatalog()}
-            disabled={isSyncing}
-            title="Download the latest earthquake catalog from USGS"
+            title="Download live earthquake catalog from USGS"
           >
             {isSyncing ? <span className="btn-spinner" /> : "↻"}{" "}
             {isSyncing ? "Syncing..." : "Sync USGS"}

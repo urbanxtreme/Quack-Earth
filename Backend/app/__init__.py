@@ -32,6 +32,19 @@ def create_app(config_object=None):
     app.extensions["forecast_service"] = forecast
     app.extensions["risk_service"] = risk
 
+    if not app.config.get("TESTING"):
+        import threading
+
+        def _initial_usgs_sync():
+            try:
+                from .services.catalog import check_online
+                if check_online():
+                    catalog.refresh(min_magnitude=2.5, days_back=30)
+            except Exception:
+                pass
+
+        threading.Thread(target=_initial_usgs_sync, daemon=True).start()
+
     # Register root routes (/status, /risk, /events, /local-event, /refresh-catalog, /risk/grid)
     app.register_blueprint(status_bp)
     app.register_blueprint(risk_bp)
@@ -44,11 +57,16 @@ def create_app(config_object=None):
     app.register_blueprint(events_bp, url_prefix="/api", name="events_api")
     app.register_blueprint(forecasts_bp, url_prefix="/api", name="forecasts_api")
 
-    # Also register with /api/v1 prefix for compatibility
+    # Also register with /api/v1 and /v1 prefix for compatibility
     app.register_blueprint(status_bp, url_prefix="/api/v1", name="status_v1")
     app.register_blueprint(risk_bp, url_prefix="/api/v1", name="risk_v1")
     app.register_blueprint(events_bp, url_prefix="/api/v1", name="events_v1")
     app.register_blueprint(forecasts_bp, url_prefix="/api/v1", name="forecasts_v1")
+
+    app.register_blueprint(status_bp, url_prefix="/v1", name="status_v1_short")
+    app.register_blueprint(risk_bp, url_prefix="/v1", name="risk_v1_short")
+    app.register_blueprint(events_bp, url_prefix="/v1", name="events_v1_short")
+    app.register_blueprint(forecasts_bp, url_prefix="/v1", name="forecasts_v1_short")
 
     @app.errorhandler(404)
     def not_found(_error):
