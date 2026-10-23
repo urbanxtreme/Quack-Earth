@@ -100,21 +100,20 @@ class EventRepository:
             signals_path = cache_dir / "signals.json"
 
             cat_events = [e for e in all_events if e.source != "user_report" and not e.event_id.startswith("local_")]
-            if cat_events:
-                with open(catalog_path, "w", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(["id", "time", "latitude", "longitude", "depth_km", "magnitude", "mag_type", "source"])
-                    for e in sorted(cat_events, key=lambda x: x.origin_time):
-                        writer.writerow([
-                            e.event_id,
-                            e.origin_time.isoformat().replace("+00:00", "Z"),
-                            e.latitude,
-                            e.longitude,
-                            e.depth_km if e.depth_km is not None else 10.0,
-                            e.magnitude if e.magnitude is not None else 4.0,
-                            e.magnitude_type or "",
-                            "usgs" if "usgs" in e.source.lower() else "local",
-                        ])
+            with open(catalog_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["id", "time", "latitude", "longitude", "depth_km", "magnitude", "mag_type", "source"])
+                for e in sorted(cat_events, key=lambda x: x.origin_time):
+                    writer.writerow([
+                        e.event_id,
+                        e.origin_time.isoformat().replace("+00:00", "Z"),
+                        e.latitude,
+                        e.longitude,
+                        e.depth_km if e.depth_km is not None else 10.0,
+                        e.magnitude if e.magnitude is not None else 4.0,
+                        e.magnitude_type or "",
+                        "usgs" if "usgs" in e.source.lower() else "local",
+                    ])
 
             local_events = [e for e in all_events if e.source == "user_report" or e.event_id.startswith("local_")]
             sig_data = []
@@ -173,11 +172,15 @@ class EventRepository:
                     radius_km: float | None = None, limit: int = 5000) -> list[Event]:
         clauses, values = [], []
         if start:
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
             clauses.append("origin_time >= ?")
-            values.append(start.isoformat())
+            values.append(start.astimezone(timezone.utc).isoformat())
         if end:
+            if end.tzinfo is None:
+                end = end.replace(tzinfo=timezone.utc)
             clauses.append("origin_time <= ?")
-            values.append(end.isoformat())
+            values.append(end.astimezone(timezone.utc).isoformat())
         if min_magnitude is not None:
             clauses.append("magnitude >= ?")
             values.append(min_magnitude)
