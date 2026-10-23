@@ -8,7 +8,13 @@ Run this from the repo root (`Quack-Earth`):
 python model/scripts/run_score.py --catalog data/fixtures/scenario_m62.csv --as-of 2024-01-15T03:35:00Z --bounds 36.2 36.2 38.2 38.2 --resolution 0.05 --out outputs/grids/scenario_m62.csv
 ```
 
-That is the outage scenario: an M 6.2 at 03:15 UTC, scored 20 minutes later, while the network is down. The same command with `--as-of 2024-01-15T03:10:00Z` is the map before that mainshock. A cached catalog from the backend is the same command with `--catalog data/cache/catalog.csv`.
+That is the outage scenario: an M 6.2 at 03:15 UTC, scored 20 minutes later, while the network is down. Add a phone accelerometer hit at 37.45°N, 37.20°E with:
+
+```bash
+python model/scripts/run_score.py --catalog data/fixtures/scenario_m62.csv --signals data/fixtures/scenario_signal.json --as-of 2024-01-15T03:35:00Z --bounds 36.2 36.2 38.2 38.2 --resolution 0.05 --out outputs/grids/scenario_m62_signal.csv
+```
+
+The same command with `--as-of 2024-01-15T03:10:00Z` is the map before that mainshock. A cached catalog from the backend is the same command with `--catalog data/cache/catalog.csv`. An accelerometer weight is its confidence. A resident report counts as confidence times 0.3. A missing magnitude becomes `3.0 + 1.5 × confidence`.
 
 ```bash
 python model/scripts/run_score.py
@@ -17,7 +23,7 @@ python model/scripts/run_score.py
 Tests still run from `model/`:
 
 ```bash
-python -m pytest tests/test_contract.py tests/test_kernels.py tests/test_engine.py
+python -m pytest tests/test_contract.py tests/test_kernels.py tests/test_engine.py tests/test_multimodal.py
 ```
 
 The default command scores `data/fixtures/catalog.csv` at `2023-02-07T00:00:00Z` over west 35, south 34, east 41, north 41 and writes `outputs/grids/risk_grid.csv` plus `risk_grid.geojson`.
@@ -108,4 +114,4 @@ Fit bounds when Phase 3 runs: `k` above 0, `c_days` in `[0.001, 1]`, `p` in `[0.
 
 ## What is not in this phase
 
-No accelerometer or report scoring, no USGS download, no plots, and no map. `data/cache/` is the drop zone for the backend catalog. Point `--catalog` at it when the columns above are present.
+No USGS download, no plots, and no map. `data/cache/` is the drop zone for the backend catalog. Point `--catalog` at it when the columns above are present. Local signals go in `--signals`.

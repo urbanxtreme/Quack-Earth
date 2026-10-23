@@ -1,0 +1,11 @@
+[
+  {
+    "id": "phone-1",
+    "time": "2024-01-15T03:30:00Z",
+    "latitude": 37.45,
+    "longitude": 37.20,
+    "signal_type": "accelerometer",
+    "confidence": 0.9,
+    "equivalent_magnitude": 4.2
+  }
+]

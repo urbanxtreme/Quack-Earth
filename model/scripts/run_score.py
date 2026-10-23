@@ -2,9 +2,9 @@
 
 From the repo root:
 
-    python model/scripts/run_score.py --catalog data/fixtures/scenario_m62.csv --as-of 2024-01-15T03:35:00Z --bounds 36.2 36.2 38.2 38.2 --resolution 0.05 --out outputs/grids/scenario_m62.csv
+    python model/scripts/run_score.py --catalog data/fixtures/scenario_m62.csv --signals data/fixtures/scenario_signal.json --as-of 2024-01-15T03:35:00Z --bounds 36.2 36.2 38.2 38.2 --resolution 0.05 --out outputs/grids/scenario_m62_signal.csv
 
-Relative --catalog and --out paths are read from the ``model`` folder.
+Relative --catalog, --signals, and --out paths are read from the ``model`` folder.
 """
 
 from __future__ import annotations
@@ -20,12 +20,13 @@ if str(ROOT) not in sys.path:
 from quack_risk.config import DEMO_AS_OF, DEMO_BOUNDS  # noqa: E402
 from quack_risk.engine import score_grid  # noqa: E402
 from quack_risk.geo import equirectangular_km  # noqa: E402
-from quack_risk.io import load_catalog, write_risk_grid  # noqa: E402
+from quack_risk.io import load_catalog, load_signals, write_risk_grid  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Score a cached catalog and write the risk grid.")
     parser.add_argument("--catalog", type=Path, default=ROOT / "data" / "fixtures" / "catalog.csv")
+    parser.add_argument("--signals", type=Path, default=None, help="Optional JSON list of local accelerometer hits and reports.")
     parser.add_argument("--as-of", default=DEMO_AS_OF, help="UTC time the score is valid at. Later events are ignored.")
     parser.add_argument(
         "--bounds",
@@ -40,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     catalog_path = _model_path(args.catalog)
     out_path = _model_path(args.out)
+    signals = None if args.signals is None else load_signals(_model_path(args.signals))
 
     catalog = load_catalog(catalog_path)
     grid = score_grid(
@@ -48,8 +50,11 @@ def main(argv: list[str] | None = None) -> int:
         bounds=tuple(args.bounds),
         resolution_deg=args.resolution,
         magnitude_threshold=args.magnitude_threshold,
+        local_signals=signals,
     )
     csv_path, geojson_path = write_risk_grid(grid, out_path)
+    if signals is not None:
+        print(f"local signals: {len(signals)}")
     _print_summary(grid, args.as_of, csv_path, geojson_path)
     return 0
 

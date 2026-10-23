@@ -12,6 +12,7 @@ from quack_risk.config import RiskParams
 from quack_risk.geo import cell_area_km2, equirectangular_km, grid_centers
 from quack_risk.io import validate_catalog
 from quack_risk.kernels import omori_productivity, spatial_weights
+from quack_risk.multimodal import signals_to_triggers
 from quack_risk.probability import relative_risk, risk_levels, window_probabilities
 from quack_risk.schema import GRID_COLUMNS
 
@@ -34,10 +35,10 @@ def score_grid(
     ``λ = μ + Σ K × 10^(α (M − M_c)) / (Δt + c)^p × spatial_weight``
 
     Events after ``as_of`` are ignored. Events older than the recent window
-    stay in the baseline and do not trigger. ``local_signals`` is accepted so
-    the signature stays stable; accelerometer and report rows are applied in
-    the next phase and do not change this grid. ``use_ml_adjustment`` is the
-    Phase 3 residual and raises if turned on.
+    stay in the baseline and do not trigger. Accelerometer hits and resident
+    reports in ``local_signals`` join the same sum, scaled by confidence.
+    They do not change the baseline. ``use_ml_adjustment`` is the Phase 3
+    residual and raises if turned on.
 
     Rates are expected events per day in the cell at or above ``M_c``.
     """
@@ -46,10 +47,6 @@ def score_grid(
             "use_ml_adjustment is reserved for Phase 3. "
             "Call score_grid with use_ml_adjustment=False."
         )
-    if local_signals is not None and len(local_signals) > 0:
-        # Kept on the signature for the offline report flow. Not applied yet.
-        pass
-
     params = replace(params or RiskParams(), magnitude_threshold=magnitude_threshold)
     if params.k < 0 or params.c_days <= 0 or params.p <= 0:
         raise ValueError("k must be >= 0, and c_days and p must be positive.")
@@ -81,6 +78,17 @@ def score_grid(
         flat_area=flat_area,
         params=params,
     )
+    local_rows = signals_to_triggers(local_signals, as_of=as_of_utc, params=params)
+    triggered = triggered + _triggered_rates(
+        local_rows,
+        as_of=as_of_utc,
+        flat_lat=flat_lat,
+        flat_lon=flat_lon,
+        flat_area=flat_area,
+        params=params,
+        apply_completeness_cut=False,
+        clip_magnitude_to_completeness=True,
+    )
     total = baseline + triggered
     probability_24h, probability_7d = window_probabilities(total)
     comparison = relative_risk(total, baseline)
@@ -109,6 +117,8 @@ def _triggered_rates(
     flat_lon: np.ndarray,
     flat_area: np.ndarray,
     params: RiskParams,
+    apply_completeness_cut: bool = True,
+    clip_magnitude_to_completeness: bool = False,
 ) -> np.ndarray:
     total = np.zeros(flat_lat.shape[0], dtype=float)
     if catalog.empty:
@@ -117,11 +127,9 @@ def _triggered_rates(
     times = pd.to_datetime(catalog["time"], utc=True)
     delta_days = (as_of - times) / pd.Timedelta(days=1)
     magnitudes = catalog["magnitude"].to_numpy(dtype=float)
-    recent = (
-        (delta_days >= 0)
-        & (delta_days <= params.recent_window_days)
-        & (magnitudes >= params.magnitude_threshold)
-    )
+    recent = (delta_days >= 0) & (delta_days <= params.recent_window_days)
+    if apply_completeness_cut:
+        recent = recent & (magnitudes >= params.magnitude_threshold)
     if not bool(recent.any()):
         return total
 
@@ -130,7 +138,12 @@ def _triggered_rates(
     event_lon = chosen["longitude"].to_numpy(dtype=float)
     event_mag = chosen["magnitude"].to_numpy(dtype=float)
     event_age = delta_days.loc[recent].to_numpy(dtype=float)
-    productivity = omori_productivity(event_mag, event_age, params)
+    productivity_mag = event_mag
+    if clip_magnitude_to_completeness:
+        productivity_mag = np.maximum(event_mag, params.magnitude_threshold)
+    productivity = omori_productivity(productivity_mag, event_age, params)
+    if "trigger_weight" in chosen.columns:
+        productivity = productivity * chosen["trigger_weight"].to_numpy(dtype=float)
 
     for start in range(0, len(chosen), EVENT_CHUNK):
         stop = start + EVENT_CHUNK
