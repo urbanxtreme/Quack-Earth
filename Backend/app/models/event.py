@@ -40,7 +40,7 @@ class Event:
             "time": self.origin_time.isoformat().replace("+00:00", "Z"),
             "lat": self.latitude,
             "lon": self.longitude,
-            "magnitude": self.magnitude,
+            "magnitude": self.magnitude if self.magnitude is not None else 0.0,
             "source": "usgs" if "usgs" in self.source.lower() else self.source,
             "place": self.place or (self.note if self.note else f"Region near {self.latitude:.2f}°, {self.longitude:.2f}°"),
         }

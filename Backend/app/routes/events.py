@@ -60,13 +60,14 @@ def events():
                     "id": ev["id"],
                     "geometry": {
                         "type": "Point",
-                        "coordinates": [ev["lon"], ev["lat"], ev.get("depth_km")],
+                        "coordinates": [ev["lon"], ev["lat"]] if ev.get("depth_km") is None else [ev["lon"], ev["lat"], ev["depth_km"]],
                     },
                     "properties": {
                         "mag": ev["magnitude"],
                         "time": ev["time"],
                         "source": ev["source"],
                         "note": ev.get("note"),
+                        "place": ev.get("place"),
                     },
                 }
                 for ev in event_list
@@ -83,6 +84,15 @@ def events():
         }, 200
     except ValueError as exc:
         return error(f"Invalid query parameter: {exc}", 400)
+
+
+@events_bp.get("/events/<event_id>")
+def get_single_event(event_id: str):
+    repository = current_app.extensions["event_repository"]
+    event = repository.get_event(event_id)
+    if not event:
+        return error("Event not found", 404, code="event_not_found")
+    return event.to_dict(), 200
 
 
 @events_bp.post("/local-event")
@@ -104,6 +114,9 @@ def add_local_event():
 
     if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
         return error("latitude and longitude out of range", 422)
+
+    if not (-1.0 <= magnitude <= 10.0):
+        return error("magnitude must be between -1.0 and 10.0", 422)
 
     time_str = body.get("time")
     if time_str:

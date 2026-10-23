@@ -247,3 +247,97 @@ def test_model_cache_export_and_quack_risk_compatibility(app):
     assert signals_path.exists()
     sig_df = load_signals(signals_path)
     assert isinstance(sig_df, object)
+
+
+def test_forecasts_endpoint_validation(client):
+    # Invalid JSON
+    res = client.post("/forecasts", data="not json", content_type="text/plain")
+    assert res.status_code == 400
+    assert "Request body must be a JSON object" in res.get_json()["error"]
+    assert res.get_json()["code"] == "invalid_json"
+
+    # Missing trigger_event_id
+    res = client.post("/forecasts", json={"target": {"latitude": 34.0, "longitude": -118.0, "radius_km": 50}})
+    assert res.status_code == 400
+    assert res.get_json()["code"] == "invalid_trigger_event"
+
+    # Event not found in cache
+    res = client.post("/forecasts", json={
+        "trigger_event_id": "nonexistent_id",
+        "target": {"latitude": 34.0, "longitude": -118.0, "radius_km": 50},
+        "window_hours": 24,
+        "minimum_magnitude": 3.0,
+    })
+    assert res.status_code == 404
+    assert res.get_json()["code"] == "trigger_event_not_found"
+
+
+def test_forecasts_endpoint_success(client):
+    # Create an event first
+    local_res = client.post("/local-event", json={
+        "lat": 34.05,
+        "lon": -118.25,
+        "magnitude": 5.0,
+    })
+    assert local_res.status_code == 201
+    event_id = local_res.get_json()["event_id"]
+
+    # In test environment, manually update last_successful_sync so cache_empty check passes
+    from datetime import datetime, timezone
+    client.application.extensions["event_repository"].set_metadata({
+        "last_successful_sync": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    })
+
+    res = client.post("/forecasts", json={
+        "trigger_event_id": event_id,
+        "target": {
+            "latitude": 34.05,
+            "longitude": -118.25,
+            "radius_km": 50.0,
+        },
+        "window_hours": 24,
+        "minimum_magnitude": 4.0,
+    })
+    assert res.status_code == 200
+    data = res.get_json()
+    assert "target" in data
+    assert "window_hours" in data
+    assert "expected_events" in data
+    assert "probability" in data
+    assert "model_name" in data
+
+
+def test_get_single_event(client):
+    local_res = client.post("/local-event", json={
+        "lat": 34.05,
+        "lon": -118.25,
+        "magnitude": 4.8,
+        "note": "Felt at downtown",
+    })
+    assert local_res.status_code == 201
+    event_id = local_res.get_json()["event_id"]
+
+    res = client.get(f"/events/{event_id}")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["id"] == event_id
+    assert data["magnitude"] == 4.8
+    assert data["lat"] == 34.05
+    assert data["lon"] == -118.25
+
+    # 404 for non-existent event
+    res404 = client.get("/events/nonexistent_id")
+    assert res404.status_code == 404
+    assert res404.get_json()["code"] == "event_not_found"
+
+
+def test_local_event_magnitude_validation(client):
+    res = client.post("/local-event", json={
+        "lat": 34.05,
+        "lon": -118.25,
+        "magnitude": 15.0,
+    })
+    assert res.status_code == 422
+    assert "magnitude must be between" in res.get_json()["error"]
+
+
