@@ -1,18 +1,18 @@
 import { useState } from "react";
-import MapViewer from "./MapViewer";
+import Dashboard from "./Dashboard";
 
 export default function App() {
-  const [showMap, setShowMap] = useState<boolean>(false);
-  const [placeQuery, setPlaceQuery] = useState<string>("");
+  const [showDashboard, setShowDashboard] = useState<boolean>(true);
+  const [placeQuery, setPlaceQuery] = useState<string>("Tokyo");
 
   const handleOpenMap = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    setShowMap(true);
+    setShowDashboard(true);
   };
 
   return (
     <main className="app-root">
-      {!showMap ? (
+      {!showDashboard ? (
         <section className="landing-screen">
           <div className="landing-card">
             <div className="brand-header">
@@ -21,7 +21,7 @@ export default function App() {
               </div>
               <h1 className="brand-heading">Quack Earth</h1>
               <p className="brand-subheading">
-                Interactive seismic & geospatial heatmap explorer powered by PMTiles and MapLibre
+                Edge-capable seismic risk anticipation & geospatial intelligence powered by PMTiles and MapLibre
               </p>
             </div>
 
@@ -41,7 +41,7 @@ export default function App() {
 
               <div className="landing-quick-tags">
                 <span className="quick-label">Suggestions:</span>
-                {["Tokyo", "San Francisco", "Chile", "Nepal", "Turkey"].map((place) => (
+                {["Tokyo", "San Francisco", "Chile", "Nepal", "Turkey", "Kochi"].map((place) => (
                   <button
                     key={place}
                     type="button"
@@ -61,7 +61,7 @@ export default function App() {
                   className="btn-primary"
                   id="open-map-button"
                 >
-                  <span>Click to open map</span>
+                  <span>Launch Seismic Anticipation Engine</span>
                   <span className="btn-arrow">→</span>
                 </button>
               </div>
@@ -74,18 +74,18 @@ export default function App() {
               </div>
               <div className="feature-pill">
                 <span className="pill-dot" />
-                <span>Dynamic Radial Heatmaps</span>
+                <span>Omori Short-Term Probabilities</span>
               </div>
               <div className="feature-pill">
                 <span className="pill-dot" />
-                <span>USGS Real-Time Earthquake Integration</span>
+                <span>USGS & Edge Local Catalogs</span>
               </div>
             </div>
           </div>
         </section>
       ) : (
-        <MapViewer
-          onBack={() => setShowMap(false)}
+        <Dashboard
+          onBackToLanding={() => setShowDashboard(false)}
           initialPlace={placeQuery.trim() || undefined}
         />
       )}
