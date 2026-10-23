@@ -6,13 +6,22 @@ import { layers, namedFlavor } from "@protomaps/basemaps";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import type { FeatureCollection, Point } from "geojson";
 import type { EarthquakeEvent } from "./api";
+import type { FeatureCollection, Point } from "geojson";
+import type { EarthquakeEvent } from "./api";
 
 // Configure MapLibre Web Worker for Vite
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
 export interface MapViewerProps {
   onBack?: () => void;
+export interface MapViewerProps {
+  onBack?: () => void;
   initialPlace?: string;
+  events?: EarthquakeEvent[];
+  selectedEvent?: EarthquakeEvent | null;
+  onSelectEvent?: (event: EarthquakeEvent) => void;
+  onMapClick?: (coords: { lat: number; lon: number }) => void;
+  targetCoords?: { lat: number; lon: number; label?: string } | null;
   events?: EarthquakeEvent[];
   selectedEvent?: EarthquakeEvent | null;
   onSelectEvent?: (event: EarthquakeEvent) => void;
@@ -30,6 +39,60 @@ interface HeatmapStats {
   locationName: string;
   centerLat: number;
   centerLon: number;
+}
+
+interface MapEventProperties {
+  id: string;
+  time: string;
+  lat: number;
+  lon: number;
+  magnitude: number | null;
+  depth_km?: number;
+  source: string;
+}
+
+interface MapEventFeature {
+  type: "Feature";
+  id?: string;
+  geometry: {
+    type: "Point";
+    coordinates: [number, number];
+  };
+  properties: MapEventProperties;
+}
+
+interface MapEventsResponse {
+  type: "FeatureCollection";
+  features: MapEventFeature[];
+  count: number;
+  data_as_of: string | null;
+}
+
+interface MapEventProperties {
+  id: string;
+  time: string;
+  lat: number;
+  lon: number;
+  magnitude: number | null;
+  depth_km?: number;
+  source: string;
+}
+
+interface MapEventFeature {
+  type: "Feature";
+  id?: string;
+  geometry: {
+    type: "Point";
+    coordinates: [number, number];
+  };
+  properties: MapEventProperties;
+}
+
+interface MapEventsResponse {
+  type: "FeatureCollection";
+  features: MapEventFeature[];
+  count: number;
+  data_as_of: string | null;
 }
 
 interface MapEventProperties {
@@ -961,6 +1024,15 @@ export default function MapViewer({
 
           <button className="btn-secondary" onClick={handleResetView} title="Reset camera to world overview">
             Reset View
+          </button>
+          <button
+            className="btn-sync"
+            onClick={() => void handleSyncCatalog()}
+            disabled={isSyncing}
+            title="Download the latest earthquake catalog from USGS"
+          >
+            {isSyncing ? <span className="btn-spinner" /> : "↻"}{" "}
+            {isSyncing ? "Syncing..." : "Sync USGS"}
           </button>
           <button
             className="btn-sync"

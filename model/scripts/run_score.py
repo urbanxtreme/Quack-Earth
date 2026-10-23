@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from quack_risk.calibrate import load_fitted_params  # noqa: E402
 from quack_risk.config import DEMO_AS_OF, DEMO_BOUNDS, RiskParams  # noqa: E402
 from quack_risk.engine import score_grid  # noqa: E402
 from quack_risk.geo import equirectangular_km  # noqa: E402
@@ -42,6 +43,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--resolution", type=float, default=0.2, help="Cell size in degrees.")
     parser.add_argument("--magnitude-threshold", type=float, default=4.0)
     parser.add_argument("--out", type=Path, default=ROOT / "outputs" / "grids" / "risk_grid.csv")
+    parser.add_argument("--params", type=Path, default=ROOT / "data" / "cache" / "params.json")
+    parser.add_argument(
+        "--defaults",
+        action="store_true",
+        help="Use the built-in K, c, and p even when params.json is present.",
+    )
     parser.add_argument(
         "--rewrite-verdict",
         action="store_true",
@@ -56,6 +63,12 @@ def main(argv: list[str] | None = None) -> int:
     signals = None if args.signals is None else load_signals(_model_path(args.signals))
 
     catalog = load_catalog(catalog_path)
+    params_path = None if args.params is None else _model_path(args.params)
+    fitted = None if args.defaults or params_path is None else load_fitted_params(params_path)
+    if fitted is None:
+        print("parameters: built-in defaults")
+    else:
+        print(f"parameters: k={fitted.k:.6g}, c_days={fitted.c_days:.6g}, p={fitted.p:.6g} from {params_path.name}")
     grid = score_grid(
         catalog,
         as_of=args.as_of,
@@ -63,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         resolution_deg=args.resolution,
         magnitude_threshold=args.magnitude_threshold,
         local_signals=signals,
+        params=fitted,
     )
     grid = attach_outlook(grid, magnitude_threshold=args.magnitude_threshold)
     grid = attach_public_zone(grid)
