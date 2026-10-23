@@ -32,6 +32,7 @@ No authentication is required for prototype development.
 | POST   | `/local-event`        | Add a local event/report and update risk evaluations    |
 | POST   | `/refresh-catalog`    | Download latest catalog from USGS (online only)         |
 | GET    | `/risk/grid`          | Get risk values on a regular grid (for heatmaps)        |
+| POST   | `/forecasts`          | Compute aftershock hazard triggered by a specific event |
 
 ---
 
@@ -361,7 +362,121 @@ GET /risk/grid?min_lat=33.5&max_lat=34.5&min_lon=-119.0&max_lon=-117.5&resolutio
 
 ---
 
-## Risk Model & Scale Reference
+## 7. Event-Triggered Aftershock Forecast
+
+### `POST /forecasts`
+
+Calculates localized aftershock probability and expected event rates explicitly triggered by a specific reference earthquake in the local cache, computed via the `ForecastService`.
+
+#### Request Body
+
+```json
+{
+  "trigger_event_id": "us7000abcd",
+  "target": {
+    "latitude": 34.05,
+    "longitude": -118.25,
+    "radius_km": 50.0
+  },
+  "window_hours": 24,
+  "minimum_magnitude": 4.0
+}
+```
+
+| Field                  | Type    | Required | Allowed Values / Constraints                  | Description                                                |
+|------------------------|---------|----------|-----------------------------------------------|------------------------------------------------------------|
+| `trigger_event_id`     | string  | **Yes**  | Non-empty string                              | ID of the reference earthquake present in local cache       |
+| `target.latitude`      | float   | **Yes**  | `[-90.0, 90.0]`                               | Center latitude of the forecast assessment zone            |
+| `target.longitude`     | float   | **Yes**  | `[-180.0, 180.0]`                             | Center longitude of the forecast assessment zone           |
+| `target.radius_km`     | float   | **Yes**  | `(0.0, 500.0]`                                | Radius in kilometers around target coordinates             |
+| `window_hours`         | integer | **Yes**  | `24` or `168`                                 | Forecast horizon: `24` (1 day) or `168` (7 days)           |
+| `minimum_magnitude`    | float   | **Yes**  | `[-1.0, 10.0]`                                | Threshold magnitude $M_c$ for anticipated events           |
+
+#### Response `200 OK`
+
+```json
+{
+  "target": {
+    "latitude": 34.05,
+    "longitude": -118.25,
+    "radius_km": 50.0
+  },
+  "window_hours": 24,
+  "minimum_magnitude": 4.0,
+  "expected_event_count": 0.42,
+  "probability_at_least_one": 0.34,
+  "baseline_rate_per_day": 0.018,
+  "relative_activity_score": 6.8,
+  "data_as_of": "2026-10-23T14:30:00Z",
+  "model": "omori-style-v1",
+  "assumptions": [
+    "Spatial kernel decays exponentially with distance d0 = 40 km",
+    "Productivity follows Gutenberg-Richter scaling with alpha = 0.9",
+    "Temporal rate decay follows modified Omori p = 1.1, c = 0.05d"
+  ],
+  "limitations": [
+    "Assumes isotropic circular spatial distribution",
+    "Requires non-empty catalog synchronization for baseline determination"
+  ]
+}
+```
+
+| Field                       | Type    | Description                                                         |
+|-----------------------------|---------|---------------------------------------------------------------------|
+| `expected_event_count`      | float   | Integrated expected number of events $\ge M_c$ in the window        |
+| `probability_at_least_one`  | float   | Poisson probability $P(N \ge 1) = 1 - \exp(-\lambda_{\text{total}})$ |
+| `baseline_rate_per_day`     | float   | Background daily event rate for the targeted circle                 |
+| `relative_activity_score`   | float   | Ratio of forecast rate to baseline rate                             |
+| `data_as_of`                | string  | ISO-8601 UTC timestamp of latest catalog event considered           |
+| `assumptions`               | array   | List of mathematical and physical model assumptions                 |
+| `limitations`               | array   | Operational boundary limitations of the forecast output             |
+
+---
+
+## 8. Planned Edge Endpoints (Frontend Feature Roadmap)
+
+To achieve 100% autonomous edge and offline operation in the frontend UI, the following complementary endpoints are planned:
+
+### 8.1 Offline Place Geocoding (`GET /geocode`)
+* **Endpoint:** `GET /geocode?q=<place_name>&limit=5`
+* **Description:** Resolves place names to `(lat, lon)` using a bundled SQLite gazetteer when disconnected from external geocoding providers (Nominatim/OSM).
+* **Sample Response:**
+  ```json
+  [
+    { "name": "Tokyo, Japan", "lat": 35.6762, "lon": 139.6503, "country": "JP" },
+    { "name": "San Francisco, USA", "lat": 37.7749, "lon": -122.4194, "country": "US" }
+  ]
+  ```
+
+### 8.2 Regional Alert Feed (`GET /risk/alerts`)
+* **Endpoint:** `GET /risk/alerts?min_risk=0.7&limit=10`
+* **Description:** Returns ranked geographic clusters currently experiencing elevated or critical seismic risk scores without requiring manual coordinate inputs.
+* **Sample Response:**
+  ```json
+  {
+    "count": 1,
+    "alerts": [
+      {
+        "region": "Greater Tokyo Area",
+        "center": { "lat": 35.68, "lon": 139.70 },
+        "peak_risk_score": 0.88,
+        "hazard_category": "critical",
+        "relative_baseline": 14.2
+      }
+    ]
+  }
+  ```
+
+### 8.3 Local Report Management (`GET /local-events`, `DELETE /local-event/{id}`)
+* **Endpoints:**
+  * `GET /local-events`: Retrieves a list of user/sensor reports submitted via `POST /local-event`.
+  * `DELETE /local-event/<event_id>`: Removes an erroneous or obsolete local report from the database and triggers catalog cache recalculation.
+
+### 8.4 Single Event Metadata (`GET /events/{event_id}`)
+* **Endpoint:** `GET /events/<event_id>`
+* **Description:** Retrieves detailed telemetry for a single earthquake, including recording stations, azimuthal gap, depth uncertainty, and linked aftershocks.
+
+---
 
 ### Model Identifier: `omori-style-v1`
 
@@ -408,6 +523,7 @@ Standard error responses return an `error` key containing a human-readable expla
 | Code | Status                 | Typical Scenario                                           |
 |------|------------------------|------------------------------------------------------------|
 | 400  | Bad Request            | Missing query parameters or invalid coordinate numbers     |
-| 422  | Unprocessable Entity   | Coordinates out of range, or `time_window` not `24h`/`7d`  |
-| 500  | Internal Server Error  | Risk calculation failure                                   |
-| 503  | Service Unavailable    | `/refresh-catalog` attempted while offline (preserves cache) |
+| 404  | Not Found              | `trigger_event_id` does not exist in the local cache       |
+| 422  | Unprocessable Entity   | Coordinates out of range, or invalid window / magnitude   |
+| 500  | Internal Server Error  | Risk or forecast engine calculation failure                |
+| 503  | Service Unavailable    | Catalog sync requires internet, or cache empty before sync |
