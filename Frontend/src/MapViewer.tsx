@@ -4,14 +4,20 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import * as pmtiles from "pmtiles";
 import { layers, namedFlavor } from "@protomaps/basemaps";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-import type { FeatureCollection } from "geojson";
+import type { FeatureCollection, Point } from "geojson";
+import type { EarthquakeEvent } from "./api";
 
 // Configure MapLibre Web Worker for Vite
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
-interface MapViewerProps {
-  onBack: () => void;
+export interface MapViewerProps {
+  onBack?: () => void;
   initialPlace?: string;
+  events?: EarthquakeEvent[];
+  selectedEvent?: EarthquakeEvent | null;
+  onSelectEvent?: (event: EarthquakeEvent) => void;
+  onMapClick?: (coords: { lat: number; lon: number }) => void;
+  targetCoords?: { lat: number; lon: number; label?: string } | null;
 }
 
 interface GeocodedLocation {
@@ -26,7 +32,7 @@ interface HeatmapStats {
   centerLon: number;
 }
 
-// Proxied through Vite dev server to guarantee 100% CORS & HTTP Range support on any local port
+// Proxied through Vite dev server to guarantee 100% CORS & HTTP Range support
 const getPmtilesUrl = () => {
   if (typeof window !== "undefined") {
     return `${window.location.origin}/pmtiles-proxy/v4.pmtiles`;
@@ -39,7 +45,7 @@ async function geocodePlace(query: string): Promise<GeocodedLocation | null> {
   const trimmed = query.trim();
   if (!trimmed) return null;
 
-  // 1. Try local Vite proxy first (includes User-Agent header)
+  // 1. Try local Vite proxy first
   try {
     const res = await fetch(`/nominatim-proxy/search?q=${encodeURIComponent(trimmed)}&format=json&limit=1`);
     if (res.ok) {
@@ -55,7 +61,7 @@ async function geocodePlace(query: string): Promise<GeocodedLocation | null> {
       }
     }
   } catch {
-    // Fall through to fallback
+    // Fallback
   }
 
   // 2. Direct Nominatim fallback
@@ -74,10 +80,10 @@ async function geocodePlace(query: string): Promise<GeocodedLocation | null> {
       }
     }
   } catch {
-    // Fall through to presets
+    // Fallback
   }
 
-  // 3. Predefined coordinates dictionary fallback for global seismic and landmark places
+  // 3. Predefined coordinates dictionary fallback
   const normalized = trimmed.toLowerCase();
   const presets: Record<string, GeocodedLocation> = {
     kochi: { name: "Kochi, Kerala, India", lat: 9.9312, lon: 76.2673 },
@@ -117,21 +123,32 @@ async function geocodePlace(query: string): Promise<GeocodedLocation | null> {
   return null;
 }
 
-export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
+export default function MapViewer({
+  onBack,
+  initialPlace,
+  events = [],
+  selectedEvent,
+  onSelectEvent,
+  onMapClick,
+  targetCoords,
+}: MapViewerProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const centerMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const clickMarkerRef = useRef<maplibregl.Marker | null>(null);
   const currentHeatmapDataRef = useRef<FeatureCollection | null>(null);
 
   const [mapLoaded, setMapLoaded] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [activeTheme, setActiveTheme] = useState<"light" | "dark" | "grayscale">("light");
+  const [activeTheme, setActiveTheme] = useState<"light" | "dark" | "grayscale">("dark");
 
   const [searchInput, setSearchInput] = useState<string>(initialPlace || "");
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
   const [activeLocation, setActiveLocation] = useState<GeocodedLocation | null>(null);
   const [heatmapStats, setHeatmapStats] = useState<HeatmapStats | null>(null);
+  const [showEventsLayer, setShowEventsLayer] = useState<boolean>(true);
+  const [showHeatmapLayer, setShowHeatmapLayer] = useState<boolean>(true);
 
   const [viewportInfo, setViewportInfo] = useState<{ lng: string; lat: string; zoom: string }>({
     lng: "0.00",
@@ -158,6 +175,136 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
     };
   };
 
+  // Convert EarthquakeEvent[] to GeoJSON FeatureCollection
+  const buildEventsGeoJSON = useCallback((evList: EarthquakeEvent[]): FeatureCollection<Point> => {
+    return {
+      type: "FeatureCollection",
+      features: evList.map((e) => ({
+        type: "Feature",
+        id: e.id,
+        geometry: {
+          type: "Point",
+          coordinates: [e.lon, e.lat],
+        },
+        properties: {
+          id: e.id,
+          mag: e.magnitude,
+          place: e.place || "Seismic Event",
+          time: e.time,
+          depth: e.depth_km ?? 10,
+          source: e.source || "usgs",
+        },
+      })),
+    };
+  }, []);
+
+  // Update or attach the Events circles layer on the map
+  const updateEventsLayer = useCallback((evList: EarthquakeEvent[]) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const geojson = buildEventsGeoJSON(evList);
+    const source = map.getSource("events-source") as maplibregl.GeoJSONSource | undefined;
+
+    if (source) {
+      source.setData(geojson);
+    } else {
+      map.addSource("events-source", {
+        type: "geojson",
+        data: geojson,
+      });
+
+      // Events outer glow / aura
+      map.addLayer({
+        id: "events-glow",
+        type: "circle",
+        source: "events-source",
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["get", "mag"],
+            2.0, 8,
+            4.0, 14,
+            6.0, 24,
+            7.5, 36,
+          ],
+          "circle-color": [
+            "step",
+            ["get", "mag"],
+            "rgba(56, 189, 248, 0.25)",
+            4.0, "rgba(250, 204, 21, 0.35)",
+            5.5, "rgba(251, 146, 60, 0.45)",
+            6.5, "rgba(239, 68, 68, 0.55)",
+          ],
+          "circle-blur": 0.6,
+        },
+      });
+
+      // Events solid core marker
+      map.addLayer({
+        id: "events-circles",
+        type: "circle",
+        source: "events-source",
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["get", "mag"],
+            2.0, 4,
+            4.0, 7,
+            6.0, 12,
+            7.5, 18,
+          ],
+          "circle-color": [
+            "step",
+            ["get", "mag"],
+            "#38bdf8",
+            4.0, "#facc15",
+            5.5, "#fb923c",
+            6.5, "#ef4444",
+          ],
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+          "circle-opacity": 0.95,
+        },
+      });
+
+      // Click event on earthquake marker
+      map.on("click", "events-circles", (e) => {
+        if (!e.features || e.features.length === 0) return;
+        const feature = e.features[0];
+        const props = feature.properties;
+        const coords = (feature.geometry as Point).coordinates;
+
+        const foundEvent = evList.find((ev) => ev.id === props.id);
+        if (foundEvent && onSelectEvent) {
+          onSelectEvent(foundEvent);
+        }
+
+        new maplibregl.Popup({ offset: 15 })
+          .setLngLat([coords[0], coords[1]])
+          .setHTML(
+            `<div class="epicenter-popup">
+              <h4>M ${props.mag} - ${props.place}</h4>
+              <p><strong>Depth:</strong> ${props.depth} km</p>
+              <p><strong>Time:</strong> ${new Date(props.time).toLocaleString()}</p>
+              <span class="popup-tag">${props.source === "user_report" ? "Local Report" : "USGS"}</span>
+            </div>`
+          )
+          .addTo(map);
+      });
+
+      // Cursor hover feedback
+      map.on("mouseenter", "events-circles", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "events-circles", () => {
+        map.getCanvas().style.cursor = "";
+      });
+    }
+  }, [buildEventsGeoJSON, onSelectEvent]);
+
   // Attach a single, clean heatmap layer around the place center
   const applyHeatmapLayer = useCallback((geojson: FeatureCollection) => {
     const map = mapRef.current;
@@ -171,13 +318,11 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
       return;
     }
 
-    // Add GeoJSON source with the single center point
     map.addSource("heatmap-source", {
       type: "geojson",
       data: geojson,
     });
 
-    // Add a single cohesive Heatmap Layer centered around that point
     map.addLayer({
       id: "earthquake-heat",
       type: "heatmap",
@@ -193,7 +338,6 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
           8, 1.6,
           12, 2.2,
         ],
-        // Smooth radial thermal gradient
         "heatmap-color": [
           "interpolate",
           ["linear"],
@@ -205,7 +349,6 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
           0.9, "rgba(239, 68, 68, 0.95)",
           1.0, "rgba(185, 28, 28, 1)",
         ],
-        // Smooth radial size expanding with map zoom
         "heatmap-radius": [
           "interpolate",
           ["exponential", 2],
@@ -245,7 +388,6 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
 
       const map = mapRef.current;
       if (map) {
-        // Fly camera directly to the place as center
         map.flyTo({
           center: [location.lon, location.lat],
           zoom: 7.5,
@@ -254,7 +396,6 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
           essential: true,
         });
 
-        // Add or update center epicenter marker
         if (centerMarkerRef.current) {
           centerMarkerRef.current.remove();
         }
@@ -271,7 +412,7 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
           `<div class="epicenter-popup">
             <h4>${location.name}</h4>
             <p><strong>Center:</strong> ${location.lat.toFixed(4)}°, ${location.lon.toFixed(4)}°</p>
-            <span class="popup-tag">Heatmap Center</span>
+            <span class="popup-tag">Single Heatmap Focus</span>
           </div>`
         );
 
@@ -342,19 +483,51 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
         setMapLoaded(true);
         map.resize();
 
-        // If an initial place was passed or provided, generate heatmap immediately
+        // Initial single heatmap center
         if (initialPlace) {
           handleGenerateHeatmap(initialPlace);
         } else {
-          // Default single heatmap centered on Tokyo
           handleGenerateHeatmap("Tokyo");
+        }
+
+        // Render events
+        if (events.length > 0) {
+          updateEventsLayer(events);
         }
       });
 
-      // Re-apply heatmap layer when style changes (e.g. theme toggle)
+      // Click on map to inspect coordinates or trigger risk evaluation
+      map.on("click", (e) => {
+        // Prevent if clicking on marker layer
+        const features = map.queryRenderedFeatures(e.point, { layers: ["events-circles"] });
+        if (features && features.length > 0) return;
+
+        const coords = { lat: e.lngLat.lat, lon: e.lngLat.lng };
+        if (onMapClick) {
+          onMapClick(coords);
+        }
+
+        // Update click marker
+        if (clickMarkerRef.current) {
+          clickMarkerRef.current.remove();
+        }
+
+        const el = document.createElement("div");
+        el.className = "target-crosshair-marker";
+        el.innerHTML = `<span class="crosshair-icon">🎯</span>`;
+
+        clickMarkerRef.current = new maplibregl.Marker({ element: el })
+          .setLngLat([coords.lon, coords.lat])
+          .addTo(map);
+      });
+
+      // Re-apply layers when style loads
       map.on("style.load", () => {
         if (currentHeatmapDataRef.current) {
           applyHeatmapLayer(currentHeatmapDataRef.current);
+        }
+        if (events.length > 0) {
+          updateEventsLayer(events);
         }
       });
 
@@ -364,10 +537,6 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
           mapRef.current.resize();
         }
       }, 2000);
-
-      map.on("error", (e: maplibregl.ErrorEvent) => {
-        console.warn("MapLibre event error:", e);
-      });
 
       map.on("move", () => {
         const center = map.getCenter();
@@ -391,9 +560,8 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
       return () => {
         clearTimeout(timeoutId);
         window.removeEventListener("resize", handleResize);
-        if (centerMarkerRef.current) {
-          centerMarkerRef.current.remove();
-        }
+        if (centerMarkerRef.current) centerMarkerRef.current.remove();
+        if (clickMarkerRef.current) clickMarkerRef.current.remove();
         map.remove();
         mapRef.current = null;
         maplibregl.removeProtocol("pmtiles");
@@ -403,6 +571,72 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
       setLoadError(err instanceof Error ? err.message : "Failed to initialize map");
     }
   }, []);
+
+  // Sync events layer when events prop changes
+  useEffect(() => {
+    if (mapLoaded && mapRef.current) {
+      updateEventsLayer(events);
+    }
+  }, [events, mapLoaded, updateEventsLayer]);
+
+  // Sync selected event camera fly-to
+  useEffect(() => {
+    if (selectedEvent && mapRef.current) {
+      mapRef.current.flyTo({
+        center: [selectedEvent.lon, selectedEvent.lat],
+        zoom: 7.0,
+        speed: 1.5,
+        curve: 1.3,
+        essential: true,
+      });
+    }
+  }, [selectedEvent]);
+
+  // Sync external target coordinates
+  useEffect(() => {
+    if (targetCoords && mapRef.current) {
+      mapRef.current.flyTo({
+        center: [targetCoords.lon, targetCoords.lat],
+        zoom: 6.5,
+        speed: 1.4,
+        essential: true,
+      });
+
+      if (clickMarkerRef.current) {
+        clickMarkerRef.current.remove();
+      }
+
+      const el = document.createElement("div");
+      el.className = "target-crosshair-marker";
+      el.innerHTML = `<span class="crosshair-icon">🎯</span>`;
+
+      clickMarkerRef.current = new maplibregl.Marker({ element: el })
+        .setLngLat([targetCoords.lon, targetCoords.lat])
+        .addTo(mapRef.current);
+    }
+  }, [targetCoords]);
+
+  // Toggle layer visibilities
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+
+    if (map.getLayer("earthquake-heat")) {
+      map.setLayoutProperty("earthquake-heat", "visibility", showHeatmapLayer ? "visible" : "none");
+    }
+  }, [showHeatmapLayer, mapLoaded]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+
+    if (map.getLayer("events-circles")) {
+      map.setLayoutProperty("events-circles", "visibility", showEventsLayer ? "visible" : "none");
+    }
+    if (map.getLayer("events-glow")) {
+      map.setLayoutProperty("events-glow", "visibility", showEventsLayer ? "visible" : "none");
+    }
+  }, [showEventsLayer, mapLoaded]);
 
   // Update theme dynamically
   const switchTheme = (theme: "light" | "dark" | "grayscale") => {
@@ -432,9 +666,11 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
       {/* Top Floating Header & Controls */}
       <header className="map-top-bar">
         <div className="map-top-left">
-          <button className="btn-secondary" onClick={onBack} title="Return to home screen">
-            <span className="btn-icon">←</span> Back
-          </button>
+          {onBack && (
+            <button className="btn-secondary" onClick={onBack} title="Return to overview">
+              <span className="btn-icon">←</span> Back
+            </button>
+          )}
           <div className="brand-badge">
             <span className="brand-dot" />
             <span className="brand-title">Quack Earth</span>
@@ -472,7 +708,7 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
                 disabled={isSearching || !searchInput.trim()}
                 id="generate-heatmap-button"
               >
-                {isSearching ? <span className="btn-spinner" /> : <span>Create Heatmap</span>}
+                {isSearching ? <span className="btn-spinner" /> : <span>Center Heatmap</span>}
               </button>
             </div>
           </form>
@@ -504,6 +740,26 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
         </div>
 
         <div className="map-top-right">
+          {/* Layer toggles */}
+          <div className="layer-toggle-group">
+            <button
+              type="button"
+              className={`layer-btn ${showHeatmapLayer ? "active" : ""}`}
+              onClick={() => setShowHeatmapLayer((prev) => !prev)}
+              title="Toggle Heatmap Layer"
+            >
+              🔥 Heatmap
+            </button>
+            <button
+              type="button"
+              className={`layer-btn ${showEventsLayer ? "active" : ""}`}
+              onClick={() => setShowEventsLayer((prev) => !prev)}
+              title="Toggle Earthquake Event Dots"
+            >
+              ⚡ Events ({events.length})
+            </button>
+          </div>
+
           <div className="theme-toggle-group">
             <button
               className={`theme-btn ${activeTheme === "light" ? "active" : ""}`}
@@ -529,7 +785,7 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
           </div>
 
           <button className="btn-secondary" onClick={handleResetView} title="Reset camera to world overview">
-            Reset View
+            Reset
           </button>
         </div>
       </header>
@@ -573,12 +829,13 @@ export default function MapViewer({ onBack, initialPlace }: MapViewerProps) {
         </aside>
       )}
 
-      {/* Bottom Coordinates Chip */}
+      {/* Bottom Coordinates & Hint Chip */}
       <footer className="map-bottom-bar">
         <div className="coord-chip">
           <span>Lat: {viewportInfo.lat}°</span>
           <span>Lng: {viewportInfo.lng}°</span>
           <span>Zoom: {viewportInfo.zoom}</span>
+          <span className="click-hint">💡 Tip: Click anywhere to evaluate risk</span>
         </div>
       </footer>
 
