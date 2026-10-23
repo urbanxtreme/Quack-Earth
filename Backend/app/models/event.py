@@ -15,17 +15,35 @@ class Event:
     review_status: str | None
     source: str
     fetched_at: datetime
+    note: str | None = None
+
+    @property
+    def id(self) -> str:
+        return self.event_id
+
+    @property
+    def time(self) -> datetime:
+        return self.origin_time
+
+    @property
+    def lat(self) -> float:
+        return self.latitude
+
+    @property
+    def lon(self) -> float:
+        return self.longitude
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "event_id": self.event_id,
-            "origin_time": self.origin_time.isoformat().replace("+00:00", "Z"),
-            "latitude": self.latitude,
-            "longitude": self.longitude,
-            "depth_km": self.depth_km,
+        data: dict[str, Any] = {
+            "id": self.event_id,
+            "time": self.origin_time.isoformat().replace("+00:00", "Z"),
+            "lat": self.latitude,
+            "lon": self.longitude,
             "magnitude": self.magnitude,
-            "magnitude_type": self.magnitude_type,
-            "review_status": self.review_status,
-            "source": self.source,
-            "fetched_at": self.fetched_at.isoformat().replace("+00:00", "Z"),
+            "source": "usgs" if "usgs" in self.source.lower() else self.source,
         }
+        if self.depth_km is not None:
+            data["depth_km"] = self.depth_km
+        if self.note:
+            data["note"] = self.note
+        return data

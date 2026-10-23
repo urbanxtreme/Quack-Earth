@@ -1,10 +1,8 @@
-"""Short-term seismic risk engine.
-
-Phase 0 exposes the file contract only. Scoring arrives in later phases.
-"""
+"""Short-term seismic risk engine."""
 
 from quack_risk.config import RiskParams
-from quack_risk.io import load_catalog, load_signals
+from quack_risk.engine import score_grid
+from quack_risk.io import load_catalog, load_signals, write_risk_grid
 from quack_risk.schema import (
     CATALOG_COLUMNS,
     GRID_COLUMNS,
@@ -22,4 +20,6 @@ __all__ = [
     "SignalSchemaError",
     "load_catalog",
     "load_signals",
+    "score_grid",
+    "write_risk_grid",
 ]
