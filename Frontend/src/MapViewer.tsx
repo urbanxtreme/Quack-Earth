@@ -980,68 +980,78 @@ export default function MapViewer({
         </aside>
       )}
 
-      {/* 72-Hour / Sequence Timeline Scrubber Bar */}
-      <div className="timeline-scrubber-bar">
-        <div className="timeline-controls-left">
-          <button
-            type="button"
-            className={`btn-timeline-play ${isPlayingTimeline ? "active" : ""}`}
-            onClick={() => {
-              if (timelinePercent >= 100) {
-                setTimelinePercent(0);
-              }
-              setIsPlayingTimeline((prev) => !prev);
-            }}
-            title={isPlayingTimeline ? "Pause sequence playback" : "Play earthquake sequence playback"}
-          >
-            {isPlayingTimeline ? "⏸ Pause" : "▶ Play Sequence"}
-          </button>
-          <button
-            type="button"
-            className="btn-timeline-reset"
-            onClick={() => {
-              setIsPlayingTimeline(false);
-              setTimelinePercent(100);
-            }}
-            title="Reset scrubber to latest"
-          >
-            ↺ Latest
-          </button>
-        </div>
-
-        <div className="timeline-slider-container">
-          <div className="timeline-labels-row font-mono text-xs">
-            <span>Sequence Origin (T-0)</span>
-            <span className="timeline-current-count font-bold text-cyan">
-              Showing {displayedEvents.length} of {sortedEvents.length} shocks ({timelinePercent.toFixed(0)}%)
-            </span>
-            <span>Latest (100%)</span>
+      {/* Unified Mission-Control Timeline & Telemetry Console */}
+      <footer className="timeline-scrubber-bar mission-control-console">
+        {/* Top Control & Telemetry Row */}
+        <div className="timeline-dock-header">
+          {/* Left: Playback Controls */}
+          <div className="timeline-controls-left">
+            <button
+              type="button"
+              className={`btn-timeline-play ${isPlayingTimeline ? "active" : ""}`}
+              onClick={() => {
+                if (timelinePercent >= 100) {
+                  setTimelinePercent(0);
+                }
+                setIsPlayingTimeline((prev) => !prev);
+              }}
+              title={isPlayingTimeline ? "Pause sequence playback" : "Play earthquake sequence playback"}
+            >
+              {isPlayingTimeline ? "⏸ Pause" : "▶ Play Sequence"}
+            </button>
+            <button
+              type="button"
+              className="btn-timeline-reset"
+              onClick={() => {
+                setIsPlayingTimeline(false);
+                setTimelinePercent(100);
+              }}
+              title="Reset scrubber to latest"
+            >
+              ↺ Latest
+            </button>
           </div>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={timelinePercent}
-            onChange={(e) => {
-              setIsPlayingTimeline(false);
-              setTimelinePercent(parseFloat(e.target.value));
-            }}
-            className="styled-range timeline-range-slider"
-          />
-        </div>
-      </div>
 
-      {/* Bottom Coordinates & Hint Chip */}
-      <footer className="map-bottom-bar">
-        <div className="coord-chip">
-          <span>Lat: {viewportInfo.lat}°</span>
-          <span>Lng: {viewportInfo.lng}°</span>
-          <span>Zoom: {viewportInfo.zoom}</span>
-          <span className="click-hint">
-            <span className="click-hint-full">💡 Tip: Click anywhere to evaluate risk</span>
-            <span className="click-hint-short">💡 Click map for risk</span>
-          </span>
+          {/* Center: Shock Counter Telemetry */}
+          <div className="timeline-dock-center">
+            <span className="timeline-shock-badge font-mono">
+              ⚡ <strong className="text-cyan">{displayedEvents.length}</strong> of {sortedEvents.length} shocks
+              <span className="timeline-pct-tag">({timelinePercent.toFixed(0)}%)</span>
+            </span>
+          </div>
+
+          {/* Right: Viewport Coordinates & Hint */}
+          <div className="timeline-dock-coords font-mono">
+            <span className="dock-coord-val">{viewportInfo.lat}°N, {viewportInfo.lng}°E</span>
+            <span className="dock-zoom-badge">z{viewportInfo.zoom}</span>
+            <span className="dock-tip-pill" title="Click anywhere on the map to evaluate site-specific seismic hazard">
+              <span className="click-hint-full">💡 Click map for risk</span>
+              <span className="click-hint-short">💡 Click for risk</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Bottom: Sequence Range Track */}
+        <div className="timeline-slider-container">
+          <div className="timeline-slider-track-row">
+            <span className="timeline-edge-label font-mono">T-0 (Sequence Start)</span>
+            <div className="timeline-range-wrapper">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={timelinePercent}
+                onChange={(e) => {
+                  setIsPlayingTimeline(false);
+                  setTimelinePercent(parseFloat(e.target.value));
+                }}
+                className="styled-range timeline-range-slider"
+                title={`Timeline sequence position: ${timelinePercent.toFixed(0)}%`}
+              />
+            </div>
+            <span className="timeline-edge-label font-mono">Latest (100%)</span>
+          </div>
         </div>
       </footer>
 
