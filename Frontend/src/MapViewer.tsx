@@ -228,20 +228,20 @@ export default function MapViewer({
             "interpolate",
             ["linear"],
             ["get", "mag"],
-            2.0, 8,
-            4.0, 14,
-            6.0, 24,
-            7.5, 36,
+            2.0, 5,
+            4.0, 8,
+            6.0, 12,
+            7.5, 16,
           ],
           "circle-color": [
             "step",
             ["get", "mag"],
-            "rgba(56, 189, 248, 0.25)",
-            4.0, "rgba(250, 204, 21, 0.35)",
-            5.5, "rgba(251, 146, 60, 0.45)",
-            6.5, "rgba(239, 68, 68, 0.55)",
+            "rgba(56, 189, 248, 0.35)",
+            4.0, "rgba(250, 204, 21, 0.45)",
+            5.5, "rgba(251, 146, 60, 0.55)",
+            6.5, "rgba(239, 68, 68, 0.65)",
           ],
-          "circle-blur": 0.6,
+          "circle-blur": 0.3,
         },
       });
 
@@ -327,46 +327,56 @@ export default function MapViewer({
       data: geojson,
     });
 
-    map.addLayer({
-      id: "earthquake-heat",
-      type: "heatmap",
-      source: "heatmap-source",
-      paint: {
-        "heatmap-weight": 1,
-        "heatmap-intensity": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          0, 1,
-          5, 1.2,
-          8, 1.6,
-          12, 2.2,
-        ],
-        "heatmap-color": [
-          "interpolate",
-          ["linear"],
-          ["heatmap-density"],
-          0, "rgba(0, 0, 0, 0)",
-          0.2, "rgba(56, 189, 248, 0.45)",
-          0.45, "rgba(250, 204, 21, 0.75)",
-          0.7, "rgba(251, 146, 60, 0.88)",
-          0.9, "rgba(239, 68, 68, 0.95)",
-          1.0, "rgba(185, 28, 28, 1)",
-        ],
-        "heatmap-radius": [
-          "interpolate",
-          ["exponential", 2],
-          ["zoom"],
-          2, 25,
-          4, 50,
-          6, 90,
-          8, 160,
-          10, 260,
-          12, 440,
-        ],
-        "heatmap-opacity": 0.82,
+    const beforeLayerId = map.getLayer("events-glow") ? "events-glow" : undefined;
+    map.addLayer(
+      {
+        id: "earthquake-heat",
+        type: "heatmap",
+        source: "heatmap-source",
+        paint: {
+          "heatmap-weight": [
+            "interpolate",
+            ["linear"],
+            ["coalesce", ["get", "mag"], 4],
+            2, 0.5,
+            5, 1.0,
+            7.5, 2.0,
+          ],
+          "heatmap-intensity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            1, 0.7,
+            5, 1.0,
+            9, 1.3,
+          ],
+          "heatmap-color": [
+            "interpolate",
+            ["linear"],
+            ["heatmap-density"],
+            0, "rgba(0, 0, 0, 0)",
+            0.2, "rgba(56, 189, 248, 0.45)",
+            0.45, "rgba(250, 204, 21, 0.75)",
+            0.7, "rgba(251, 146, 60, 0.88)",
+            0.9, "rgba(239, 68, 68, 0.95)",
+            1.0, "rgba(185, 28, 28, 1)",
+          ],
+          "heatmap-radius": [
+            "interpolate",
+            ["exponential", 2],
+            ["zoom"],
+            1, 2,
+            3, 8,
+            5, 32,
+            7, 128,
+            9, 320,
+            12, 500,
+          ],
+          "heatmap-opacity": 0.82,
+        },
       },
-    });
+      beforeLayerId
+    );
   }, []);
 
 
