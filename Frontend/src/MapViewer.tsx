@@ -634,7 +634,16 @@ export default function MapViewer({
 
         const el = document.createElement("div");
         el.className = "target-crosshair-marker";
-        el.innerHTML = `<span class="crosshair-icon">🎯</span>`;
+        el.innerHTML = `
+          <svg width="30" height="30" viewBox="0 0 30 30" fill="none" class="reticle-svg">
+            <circle cx="15" cy="15" r="10" stroke="#38bdf8" stroke-width="2" stroke-dasharray="3 3"/>
+            <circle cx="15" cy="15" r="3" fill="#38bdf8"/>
+            <line x1="15" y1="2" x2="15" y2="8" stroke="#38bdf8" stroke-width="2"/>
+            <line x1="15" y1="22" x2="15" y2="28" stroke="#38bdf8" stroke-width="2"/>
+            <line x1="2" y1="15" x2="8" y2="15" stroke="#38bdf8" stroke-width="2"/>
+            <line x1="22" y1="15" x2="28" y2="15" stroke="#38bdf8" stroke-width="2"/>
+          </svg>
+        `;
 
         clickMarkerRef.current = new maplibregl.Marker({ element: el })
           .setLngLat([coords.lon, coords.lat])
@@ -733,7 +742,16 @@ export default function MapViewer({
 
       const el = document.createElement("div");
       el.className = "target-crosshair-marker";
-      el.innerHTML = `<span class="crosshair-icon">🎯</span>`;
+      el.innerHTML = `
+        <svg width="30" height="30" viewBox="0 0 30 30" fill="none" class="reticle-svg">
+          <circle cx="15" cy="15" r="10" stroke="#38bdf8" stroke-width="2" stroke-dasharray="3 3"/>
+          <circle cx="15" cy="15" r="3" fill="#38bdf8"/>
+          <line x1="15" y1="2" x2="15" y2="8" stroke="#38bdf8" stroke-width="2"/>
+          <line x1="15" y1="22" x2="15" y2="28" stroke="#38bdf8" stroke-width="2"/>
+          <line x1="2" y1="15" x2="8" y2="15" stroke="#38bdf8" stroke-width="2"/>
+          <line x1="22" y1="15" x2="28" y2="15" stroke="#38bdf8" stroke-width="2"/>
+        </svg>
+      `;
 
       clickMarkerRef.current = new maplibregl.Marker({ element: el })
         .setLngLat([targetCoords.lon, targetCoords.lat])
@@ -822,18 +840,18 @@ export default function MapViewer({
     <div className="map-view-container">
       {/* Top Floating Header & Controls */}
       <header className="map-top-bar">
-        <div className="map-top-left">
-          {onBack && (
+        {onBack && (
+          <div className="map-top-left">
             <button className="btn-secondary" onClick={onBack} title="Return to overview">
               <span className="btn-icon">←</span> Back
             </button>
-          )}
-          <div className="brand-badge">
-            <span className="brand-dot" />
-            <span className="brand-title">Quack Earth</span>
-            <span className="badge-tech">PMTiles v4</span>
+            <div className="brand-badge">
+              <span className="brand-dot" />
+              <span className="brand-title">Quack Earth</span>
+              <span className="badge-tech">PMTiles v4</span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Floating Location Search Input Box */}
         <div className="map-search-wrapper">
