@@ -6,22 +6,13 @@ import { layers, namedFlavor } from "@protomaps/basemaps";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import type { FeatureCollection, Point } from "geojson";
 import type { EarthquakeEvent } from "./api";
-import type { FeatureCollection, Point } from "geojson";
-import type { EarthquakeEvent } from "./api";
 
 // Configure MapLibre Web Worker for Vite
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
 export interface MapViewerProps {
   onBack?: () => void;
-export interface MapViewerProps {
-  onBack?: () => void;
   initialPlace?: string;
-  events?: EarthquakeEvent[];
-  selectedEvent?: EarthquakeEvent | null;
-  onSelectEvent?: (event: EarthquakeEvent) => void;
-  onMapClick?: (coords: { lat: number; lon: number }) => void;
-  targetCoords?: { lat: number; lon: number; label?: string } | null;
   events?: EarthquakeEvent[];
   selectedEvent?: EarthquakeEvent | null;
   onSelectEvent?: (event: EarthquakeEvent) => void;
@@ -41,113 +32,7 @@ interface HeatmapStats {
   centerLon: number;
 }
 
-interface MapEventProperties {
-  id: string;
-  time: string;
-  lat: number;
-  lon: number;
-  magnitude: number | null;
-  depth_km?: number;
-  source: string;
-}
 
-interface MapEventFeature {
-  type: "Feature";
-  id?: string;
-  geometry: {
-    type: "Point";
-    coordinates: [number, number];
-  };
-  properties: MapEventProperties;
-}
-
-interface MapEventsResponse {
-  type: "FeatureCollection";
-  features: MapEventFeature[];
-  count: number;
-  data_as_of: string | null;
-}
-
-interface MapEventProperties {
-  id: string;
-  time: string;
-  lat: number;
-  lon: number;
-  magnitude: number | null;
-  depth_km?: number;
-  source: string;
-}
-
-interface MapEventFeature {
-  type: "Feature";
-  id?: string;
-  geometry: {
-    type: "Point";
-    coordinates: [number, number];
-  };
-  properties: MapEventProperties;
-}
-
-interface MapEventsResponse {
-  type: "FeatureCollection";
-  features: MapEventFeature[];
-  count: number;
-  data_as_of: string | null;
-}
-
-interface MapEventProperties {
-  id: string;
-  time: string;
-  lat: number;
-  lon: number;
-  magnitude: number | null;
-  depth_km?: number;
-  source: string;
-}
-
-interface MapEventFeature {
-  type: "Feature";
-  id?: string;
-  geometry: {
-    type: "Point";
-    coordinates: [number, number];
-  };
-  properties: MapEventProperties;
-}
-
-interface MapEventsResponse {
-  type: "FeatureCollection";
-  features: MapEventFeature[];
-  count: number;
-  data_as_of: string | null;
-}
-
-interface MapEventProperties {
-  id: string;
-  time: string;
-  lat: number;
-  lon: number;
-  magnitude: number | null;
-  depth_km?: number;
-  source: string;
-}
-
-interface MapEventFeature {
-  type: "Feature";
-  id?: string;
-  geometry: {
-    type: "Point";
-    coordinates: [number, number];
-  };
-  properties: MapEventProperties;
-}
-
-interface MapEventsResponse {
-  type: "FeatureCollection";
-  features: MapEventFeature[];
-  count: number;
-  data_as_of: string | null;
-}
 
 // Proxied through Vite dev server to guarantee 100% CORS & HTTP Range support on any local port
 const getPmtilesUrl = () => {
@@ -484,68 +369,7 @@ export default function MapViewer({
     });
   }, []);
 
-  const loadEarthquakeMarkers = useCallback(async () => {
-    const map = mapRef.current;
-    if (!map) return;
 
-    const bounds = map.getBounds();
-    const params = new URLSearchParams({
-      min_lat: bounds.getSouth().toString(),
-      max_lat: bounds.getNorth().toString(),
-      min_lon: bounds.getWest().toString(),
-      max_lon: bounds.getEast().toString(),
-      hours: "168",
-      min_magnitude: "2.5",
-      limit: "500",
-    });
-
-    setIsLoadingEvents(true);
-    try {
-      const response = await fetch(`/api/v1/map/events?${params.toString()}`);
-      const data = (await response.json()) as MapEventsResponse;
-      if (!response.ok) {
-        throw new Error("Unable to load earthquake markers");
-      }
-
-      eventMarkersRef.current.forEach((marker) => marker.remove());
-      eventMarkersRef.current = data.features.map((feature) => {
-        const magnitude = feature.properties.magnitude ?? 0;
-        const size = Math.max(10, Math.min(28, 10 + magnitude * 2));
-        const markerElement = document.createElement("div");
-        markerElement.className = "earthquake-marker";
-        markerElement.style.width = `${size}px`;
-        markerElement.style.height = `${size}px`;
-        markerElement.style.backgroundColor = magnitude >= 5
-          ? "var(--heat-red)"
-          : magnitude >= 4
-            ? "var(--heat-orange)"
-            : "var(--heat-yellow)";
-
-        const popupContent = document.createElement("div");
-        popupContent.className = "earthquake-popup";
-        const title = document.createElement("strong");
-        title.textContent = `Magnitude ${magnitude.toFixed(1)}`;
-        const details = document.createElement("p");
-        details.textContent = [
-          new Date(feature.properties.time).toLocaleString(),
-          `Depth: ${feature.properties.depth_km?.toFixed(1) ?? "—"} km`,
-          `Source: ${feature.properties.source}`,
-        ].join(" · ");
-        popupContent.append(title, details);
-
-        return new maplibregl.Marker({ element: markerElement })
-          .setLngLat(feature.geometry.coordinates)
-          .setPopup(new maplibregl.Popup({ offset: 12 }).setDOMContent(popupContent))
-          .addTo(map);
-      });
-      setEventMarkerCount(data.count);
-    } catch (error: unknown) {
-      console.warn("Could not load earthquake markers:", error);
-      setEventMarkerCount(0);
-    } finally {
-      setIsLoadingEvents(false);
-    }
-  }, []);
 
   // Main function: geocode location, center map, and create single heatmap around it
   const handleGenerateHeatmap = useCallback(async (placeQuery: string) => {
@@ -664,7 +488,6 @@ export default function MapViewer({
       map.on("load", () => {
         setMapLoaded(true);
         map.resize();
-        void loadEarthquakeMarkers();
 
         // Initial single heatmap center
         if (initialPlace) {
@@ -738,9 +561,6 @@ export default function MapViewer({
           lat: center.lat.toFixed(2),
           zoom: zoom.toFixed(1),
         });
-        map.on("moveend", () => {
-          void loadEarthquakeMarkers();
-        });
       });
 
       mapRef.current = map;
@@ -757,8 +577,6 @@ export default function MapViewer({
         window.removeEventListener("resize", handleResize);
         if (centerMarkerRef.current) centerMarkerRef.current.remove();
         if (clickMarkerRef.current) clickMarkerRef.current.remove();
-        eventMarkersRef.current.forEach((marker) => marker.remove());
-        eventMarkersRef.current = [];
         map.remove();
         mapRef.current = null;
         maplibregl.removeProtocol("pmtiles");
@@ -767,7 +585,7 @@ export default function MapViewer({
       console.error("Failed to initialize map:", err);
       setLoadError(err instanceof Error ? err.message : "Failed to initialize map");
     }
-  }, [activeTheme, applyHeatmapLayer, handleGenerateHeatmap, initialPlace, loadEarthquakeMarkers]);
+  }, [activeTheme, applyHeatmapLayer, handleGenerateHeatmap, initialPlace]);
 
   // Sync events layer when events prop changes
   useEffect(() => {
@@ -1078,7 +896,7 @@ export default function MapViewer({
               <span className="metric-lbl">Gradient</span>
             </div>
             <div className="metric-item">
-              <span className="metric-val">{isLoadingEvents ? "..." : eventMarkerCount}</span>
+              <span className="metric-val">{events.length}</span>
               <span className="metric-lbl">Earthquakes Shown</span>
             </div>
           </div>
