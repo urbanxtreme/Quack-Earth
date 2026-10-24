@@ -91,8 +91,7 @@ class EventRepository:
 
     def export_model_cache(self):
         cache_dir = Path(__file__).resolve().parents[3] / "model" / "data" / "cache"
-        if not cache_dir.exists():
-            return
+        cache_dir.mkdir(parents=True, exist_ok=True)
         try:
             import json
             all_events = self.list_events(limit=50000)
@@ -100,34 +99,47 @@ class EventRepository:
             signals_path = cache_dir / "signals.json"
 
             cat_events = [e for e in all_events if e.source != "user_report" and not e.event_id.startswith("local_")]
-            with open(catalog_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(["id", "time", "latitude", "longitude", "depth_km", "magnitude", "mag_type", "source"])
-                for e in sorted(cat_events, key=lambda x: x.origin_time):
-                    writer.writerow([
-                        e.event_id,
-                        e.origin_time.isoformat().replace("+00:00", "Z"),
-                        e.latitude,
-                        e.longitude,
-                        e.depth_km if e.depth_km is not None else 10.0,
-                        e.magnitude if e.magnitude is not None else 4.0,
-                        e.magnitude_type or "",
-                        "usgs" if "usgs" in e.source.lower() else "local",
-                    ])
+            if cat_events:
+                with open(catalog_path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["id", "time", "latitude", "longitude", "depth_km", "magnitude", "mag_type", "source"])
+                    for e in sorted(cat_events, key=lambda x: x.origin_time):
+                        writer.writerow([
+                            e.event_id,
+                            e.origin_time.isoformat().replace("+00:00", "Z"),
+                            e.latitude,
+                            e.longitude,
+                            e.depth_km if e.depth_km is not None else 10.0,
+                            e.magnitude if e.magnitude is not None else 4.0,
+                            e.magnitude_type or "",
+                            "usgs" if "usgs" in e.source.lower() else "local",
+                        ])
+
+            # Merge existing signals so no offline signals are lost
+            existing_signals = {}
+            if signals_path.exists():
+                try:
+                    loaded = json.loads(signals_path.read_text(encoding="utf-8"))
+                    if isinstance(loaded, list):
+                        for item in loaded:
+                            if isinstance(item, dict) and "id" in item:
+                                existing_signals[item["id"]] = item
+                except Exception:
+                    pass
 
             local_events = [e for e in all_events if e.source == "user_report" or e.event_id.startswith("local_")]
-            sig_data = []
             for e in sorted(local_events, key=lambda x: x.origin_time):
-                sig_data.append({
+                sig_type = "accelerometer" if (e.magnitude_type == "accelerometer" or (e.note and "accelerometer" in e.note.lower())) else "report"
+                existing_signals[e.event_id] = {
                     "id": e.event_id,
                     "time": e.origin_time.isoformat().replace("+00:00", "Z"),
                     "latitude": e.latitude,
                     "longitude": e.longitude,
-                    "signal_type": "report",
+                    "signal_type": sig_type,
                     "confidence": 1.0,
                     "equivalent_magnitude": e.magnitude,
-                })
-            signals_path.write_text(json.dumps(sig_data, indent=2), encoding="utf-8")
+                }
+            signals_path.write_text(json.dumps(list(existing_signals.values()), indent=2), encoding="utf-8")
         except Exception:
             pass
 

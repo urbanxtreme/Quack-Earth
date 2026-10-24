@@ -453,4 +453,67 @@ def test_event_corroboration_metadata(client):
     assert "confidence" in event["corroboration"]
 
 
+def test_model_params_endpoint(client):
+    res = client.get("/model/params")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["model_name"] == "quack-risk-etas-v1"
+    assert "params" in data
+    assert "k" in data["params"]
+    assert "c_days" in data["params"]
+    assert "p" in data["params"]
+    assert "alpha" in data["params"]
+
+
+def test_model_calibrate_endpoint(client):
+    # Ensure there is an event in repository to calibrate with
+    from datetime import datetime, timezone
+    from app.models.event import Event
+    now = datetime.now(timezone.utc)
+    client.application.extensions["event_repository"].upsert_events([
+        Event(
+            event_id="usgs_cal_01",
+            origin_time=now,
+            latitude=37.0,
+            longitude=37.0,
+            depth_km=10.0,
+            magnitude=6.5,
+            magnitude_type="mw",
+            review_status="reviewed",
+            source="usgs",
+            fetched_at=now,
+        ),
+        Event(
+            event_id="usgs_cal_02",
+            origin_time=now,
+            latitude=37.2,
+            longitude=37.1,
+            depth_km=8.0,
+            magnitude=4.5,
+            magnitude_type="ml",
+            review_status="reviewed",
+            source="usgs",
+            fetched_at=now,
+        ),
+    ])
+
+    res = client.post("/model/calibrate", json={
+        "min_lat": 36.0,
+        "max_lat": 38.0,
+        "min_lon": 36.0,
+        "max_lon": 38.0,
+        "resolution": 0.5,
+        "n_days": 1,
+        "maxiter": 2,
+    })
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["status"] == "calibrated"
+    assert "fitted_params" in data
+    assert data["fitted_params"]["k"] >= 0
+    assert data["fitted_params"]["c_days"] > 0
+    assert data["fitted_params"]["p"] > 0
+
+
+
 

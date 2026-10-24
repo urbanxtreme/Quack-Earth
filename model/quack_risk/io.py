@@ -183,7 +183,10 @@ def _parse_times(values: pd.Series) -> pd.Series:
         observed = values.dropna()
         unit = "ms" if not observed.empty and float(observed.abs().median()) > 1e11 else "s"
         return pd.to_datetime(values, unit=unit, utc=True, errors="coerce")
-    return pd.to_datetime(values, utc=True, errors="coerce")
+    try:
+        return pd.to_datetime(values, format="ISO8601", utc=True, errors="coerce")
+    except Exception:
+        return pd.to_datetime(values, utc=True, errors="coerce")
 
 
 def write_risk_grid(frame: pd.DataFrame, csv_path: str | Path) -> tuple[Path, Path]:

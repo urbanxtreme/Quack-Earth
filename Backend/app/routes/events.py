@@ -188,6 +188,7 @@ def add_local_event():
 
     source = body.get("source") or "user_report"
     note = body.get("note")
+    signal_type = body.get("signal_type", "accelerometer" if (note and "accelerometer" in note.lower()) else "report")
     place = body.get("place") or (f"Report: {note[:30]}" if note else f"Local observation ({lat:.2f}°, {lon:.2f}°)")
 
     repository = current_app.extensions["event_repository"]
@@ -201,7 +202,7 @@ def add_local_event():
         longitude=lon,
         depth_km=None,
         magnitude=magnitude,
-        magnitude_type="local",
+        magnitude_type=signal_type,
         review_status="user_report",
         source=source,
         fetched_at=now,
@@ -211,11 +212,53 @@ def add_local_event():
 
     repository.upsert_events([local_event])
 
+    # Multimodal corroboration gate from quack_risk
+    corroboration = {
+        "admitted": False,
+        "status": "pending_cluster",
+        "trigger_weight": 0.0,
+        "reason": "Single uncorroborated report. Waiting for spatial-temporal cluster or nearby catalog event.",
+    }
+    try:
+        from pathlib import Path
+        import pandas as pd
+        from quack_risk.config import RiskParams
+        from quack_risk.multimodal import signals_to_triggers
+        from quack_risk.io import load_signals
+
+        cache_dir = Path(__file__).resolve().parents[3] / "model" / "data" / "cache"
+        signals_path = cache_dir / "signals.json"
+        catalog_path = cache_dir / "catalog.csv"
+
+        if signals_path.exists():
+            sig_df = load_signals(signals_path)
+            cat_df = None
+            if catalog_path.exists():
+                from quack_risk.io import load_catalog
+                try:
+                    cat_df = load_catalog(catalog_path)
+                except Exception:
+                    cat_df = None
+
+            triggers = signals_to_triggers(sig_df, as_of=origin_time, params=RiskParams(), catalog=cat_df)
+            if not triggers.empty:
+                matched = triggers[triggers["id"].str.contains(event_id)]
+                if not matched.empty:
+                    corroboration = {
+                        "admitted": True,
+                        "status": "corroborated",
+                        "trigger_weight": float(matched.iloc[0]["trigger_weight"]),
+                        "reason": f"Corroborated by {matched.iloc[0]['mag_type']} evidence and admitted into risk engine.",
+                    }
+    except Exception:
+        pass
+
     return {
         "status": "added",
         "event_id": event_id,
-        "message": "Local event added. Risk will include this event.",
+        "message": "Local event added. Risk will include this event." if corroboration["admitted"] else "Local event recorded. Awaiting corroboration cluster.",
         "nearby_risk_updated": True,
+        "corroboration": corroboration,
     }, 201
 
 

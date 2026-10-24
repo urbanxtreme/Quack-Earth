@@ -152,13 +152,24 @@ def classify_risk_level(relative_risk: float) -> str:
 class RiskService:
     def __init__(self, repository):
         self.repository = repository
-        self.model_name = "omori-style-v1"
-        self.k = 0.01  # productivity parameter
-        self.alpha = 0.9  # magnitude scaling exponent
-        self.c_days = 0.05  # time offset in days
-        self.p = 1.1  # temporal decay exponent
-        self.recent_window_days = 14.0  # look-back window for triggered aftershocks
-        self.baseline_window_days = 30.0  # window for historical baseline estimation
+        self.model_name = "quack-risk-etas-v1"
+        self.baseline_window_days = 30.0
+        self.reload_params()
+
+    def reload_params(self):
+        try:
+            from quack_risk.calibrate import load_fitted_params
+            from quack_risk.config import RiskParams
+            params_path = Path(_MODEL_DIR) / "data" / "cache" / "params.json"
+            self.params = load_fitted_params(params_path) or RiskParams()
+        except Exception:
+            from quack_risk.config import RiskParams
+            self.params = RiskParams()
+        self.k = self.params.k
+        self.alpha = self.params.alpha
+        self.c_days = self.params.c_days
+        self.p = self.params.p
+        self.recent_window_days = self.params.recent_window_days
 
     def calculate_risk(
         self,
@@ -389,7 +400,15 @@ class RiskService:
                         resolution_deg=resolution,
                         magnitude_threshold=min_magnitude,
                         local_signals=sig_df,
+                        params=self.params,
                     )
+
+                    try:
+                        from quack_risk.io import write_risk_grid
+                        output_grid_path = Path(_MODEL_DIR) / "outputs" / "grids" / "risk_grid.csv"
+                        write_risk_grid(df_scored, output_grid_path)
+                    except Exception:
+                        pass
 
                     verdict_bundle = generate_verdict_and_guidance(
                         df_scored,

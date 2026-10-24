@@ -279,3 +279,113 @@ def calculate_grid():
         return error(str(exc), 400)
     except Exception as exc:
         return error("Risk engine failed", 500)
+
+
+@risk_bp.get("/model/params")
+@risk_bp.get("/risk/params")
+def get_model_params():
+    risk_service = current_app.extensions.get("risk_service")
+    if not risk_service:
+        return error("Risk service not initialized", 500)
+    params = getattr(risk_service, "params", None)
+    return {
+        "model_name": getattr(risk_service, "model_name", "quack-risk-etas-v1"),
+        "params": {
+            "k": getattr(params, "k", risk_service.k),
+            "c_days": getattr(params, "c_days", risk_service.c_days),
+            "p": getattr(params, "p", risk_service.p),
+            "alpha": getattr(params, "alpha", risk_service.alpha),
+            "magnitude_threshold": getattr(params, "magnitude_threshold", 4.0),
+            "recent_window_days": getattr(params, "recent_window_days", risk_service.recent_window_days),
+            "kernel": getattr(params, "kernel", "powerlaw"),
+        },
+    }, 200
+
+
+@risk_bp.post("/model/calibrate")
+@risk_bp.post("/risk/calibrate")
+def calibrate_model():
+    body = request.get_json(silent=True) or {}
+    try:
+        min_magnitude = float(body.get("min_magnitude", 4.0))
+        n_days = int(body.get("n_days", 10))
+        maxiter = int(body.get("maxiter", 15))
+
+        repository = current_app.extensions["event_repository"]
+        all_events = repository.list_events(limit=10000)
+        cat_events = [e for e in all_events if e.source != "user_report" and not e.event_id.startswith("local_")]
+        if not cat_events:
+            return error("No catalog events available for calibration", 400)
+
+        from pathlib import Path
+        import pandas as pd
+        from quack_risk.calibrate import fit_catalog, write_params
+
+        cat_df = pd.DataFrame([
+            {
+                "id": e.event_id,
+                "time": e.origin_time.isoformat(),
+                "latitude": e.latitude,
+                "longitude": e.longitude,
+                "depth_km": e.depth_km if e.depth_km is not None else 10.0,
+                "magnitude": e.magnitude if e.magnitude is not None else 4.0,
+                "mag_type": e.magnitude_type or "ml",
+                "source": "usgs",
+            }
+            for e in cat_events
+        ])
+
+        min_lat = body.get("min_lat")
+        max_lat = body.get("max_lat")
+        min_lon = body.get("min_lon")
+        max_lon = body.get("max_lon")
+        resolution = float(body.get("resolution", 0.2))
+
+        if min_lat is None or max_lat is None or min_lon is None or max_lon is None:
+            lats = [e.latitude for e in cat_events]
+            lons = [e.longitude for e in cat_events]
+            bounds = (
+                max(-180.0, min(lons) - 1.0),
+                max(-90.0, min(lats) - 1.0),
+                min(180.0, max(lons) + 1.0),
+                min(90.0, max(lats) + 1.0),
+            )
+        else:
+            bounds = (float(min_lon), float(min_lat), float(max_lon), float(max_lat))
+
+        fit_result = fit_catalog(
+            cat_df,
+            bounds=bounds,
+            resolution_deg=resolution,
+            n_days=n_days,
+            magnitude_threshold=min_magnitude,
+            maxiter=maxiter,
+        )
+
+        cache_dir = Path(__file__).resolve().parents[3] / "model" / "data" / "cache"
+        params_path = cache_dir / "params.json"
+        write_params(fit_result, params_path)
+
+        risk_service = current_app.extensions.get("risk_service")
+        if risk_service and hasattr(risk_service, "reload_params"):
+            risk_service.reload_params()
+
+        return {
+            "status": "calibrated",
+            "model_name": "quack-risk-etas-v1",
+            "fitted_params": {
+                "k": round(fit_result.params.k, 6),
+                "c_days": round(fit_result.params.c_days, 6),
+                "p": round(fit_result.params.p, 6),
+                "alpha": round(fit_result.params.alpha, 6),
+                "magnitude_threshold": fit_result.params.magnitude_threshold,
+            },
+            "log_likelihood": round(fit_result.log_likelihood, 2),
+            "baseline_log_likelihood": round(fit_result.baseline_log_likelihood, 2),
+            "mainshock_origin": fit_result.origin,
+            "n_days": fit_result.n_days,
+            "n_observed": fit_result.n_observed,
+            "message": "Omori ETAS parameters successfully calibrated against catalog.",
+        }, 200
+    except Exception as exc:
+        return error(f"Calibration failed: {exc}", 500)
