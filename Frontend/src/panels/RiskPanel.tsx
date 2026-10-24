@@ -135,7 +135,9 @@ export default function RiskPanel({
 
       {/* Target Location Metadata */}
       <div className="risk-target-card">
-        <div className="target-icon">📍</div>
+        <div className="target-icon-wrap">
+          <span className="target-icon">📍</span>
+        </div>
         <div className="target-details">
           <div className="target-name">
             {activeLocationName || "Global / Selected Epicenter"}
@@ -149,18 +151,21 @@ export default function RiskPanel({
       </div>
 
       {/* AI Civil Defense Commander Directive Card */}
-      <div className={`civil-defense-directive-card zone-${publicZone}`}>
+      <div className={`civil-defense-directive-card zone-${publicZone.toLowerCase()}`}>
         <div className="directive-header-row">
-          <div className="directive-icon-badge">🛡️</div>
-          <div className="directive-titles">
-            <span className="directive-tag font-mono">AI CIVIL PROTECTION DIRECTIVE</span>
-            <h3 className="directive-zone-name">
-              PUBLIC ZONE: <span className="zone-highlight">{publicZone.toUpperCase()}</span>
-            </h3>
-          </div>
-          <div className={`excavation-chip action-${excavationAction}`}>
-            <span className="chip-label">EXCAVATION</span>
-            <span className="chip-action font-mono font-bold">{excavationAction.toUpperCase()}</span>
+          <div className="directive-badge-cluster">
+            <span className="directive-tag font-mono">
+              <span className="directive-radar-dot" />
+              AI CIVIL PROTECTION DIRECTIVE
+            </span>
+            <div className="directive-pill-row">
+              <span className={`directive-zone-pill zone-${publicZone.toLowerCase()}`}>
+                ZONE: {publicZone.toUpperCase()}
+              </span>
+              <span className={`excavation-pill action-${excavationAction.toLowerCase().replace(/\s+/g, '-')}`}>
+                EXCAVATION: {excavationAction.toUpperCase()}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -172,51 +177,61 @@ export default function RiskPanel({
           </p>
         )}
 
-        <div className="directive-authority-clause font-mono">
-          <span>⚠️ Mandatory Incident Limit: Field incident commander decides binding evacuation.</span>
+        <div className="directive-authority-banner">
+          <span className="authority-icon">⚠️</span>
+          <span className="authority-text font-mono">
+            Mandatory Incident Limit: Field incident commander decides binding evacuation.
+          </span>
         </div>
       </div>
 
       {/* Time Window & Radius selector */}
       <div className="risk-controls-grid">
         <div className="control-item">
-          <span className="control-label">Horizon</span>
+          <div className="control-header">
+            <span className="control-label">Horizon</span>
+          </div>
           <div className="button-toggle-row">
             <button
               type="button"
               className={`toggle-chip ${timeWindow === "24h" ? "active" : ""}`}
               onClick={() => setTimeWindow("24h")}
             >
-              24 Hours
+              24h
             </button>
             <button
               type="button"
               className={`toggle-chip ${timeWindow === "72h" ? "active" : ""}`}
               onClick={() => setTimeWindow("72h")}
             >
-              72 Hours
+              72h
             </button>
             <button
               type="button"
               className={`toggle-chip ${timeWindow === "7d" ? "active" : ""}`}
               onClick={() => setTimeWindow("7d")}
             >
-              7 Days
+              7d
             </button>
           </div>
         </div>
 
         <div className="control-item">
-          <span className="control-label">Radius: {radiusKm} km</span>
-          <input
-            type="range"
-            min="25"
-            max="150"
-            step="25"
-            value={radiusKm}
-            onChange={(e) => setRadiusKm(parseInt(e.target.value, 10))}
-            className="styled-range"
-          />
+          <div className="control-header">
+            <span className="control-label">Radius</span>
+            <span className="control-val-badge font-mono">{radiusKm} km</span>
+          </div>
+          <div className="slider-track-wrap">
+            <input
+              type="range"
+              min="25"
+              max="150"
+              step="25"
+              value={radiusKm}
+              onChange={(e) => setRadiusKm(parseInt(e.target.value, 10))}
+              className="styled-range"
+            />
+          </div>
         </div>
       </div>
 
@@ -298,7 +313,7 @@ export default function RiskPanel({
         <div className="sequence-analysis-card">
           <div className="sequence-header-row">
             <h4 className="sequence-title">
-              <span>🔬 Sequence Identification & Omori Law</span>
+              <span>🔬 Sequence & Omori Law</span>
             </h4>
             <span className="count-pill">
               {isSeqLoading ? "Fitting..." : sequenceDetails?.confidence ? `${sequenceDetails.confidence.toUpperCase()}` : "ACTIVE"}
@@ -329,13 +344,13 @@ export default function RiskPanel({
           </div>
 
           <div className="omori-formula-box">
-            <div>r(t) = K / (t + c)^p</div>
-            <div className="omori-param-row">
+            <div className="omori-formula-title font-mono">r(t) = K / (t + c)^p</div>
+            <div className="omori-param-row font-mono">
               <span>K = {sequenceDetails?.omori_fit?.k?.toFixed(2) ?? "1.85"}</span>
-              <span>c = {sequenceDetails?.omori_fit?.c_days?.toFixed(3) ?? "0.080"} d</span>
+              <span>c = {sequenceDetails?.omori_fit?.c_days?.toFixed(3) ?? "0.080"}d</span>
               <span>p = {sequenceDetails?.omori_fit?.p?.toFixed(2) ?? "1.05"}</span>
             </div>
-            <div className="omori-param-row" style={{ marginTop: "3px", color: "var(--text-dim)" }}>
+            <div className="omori-param-row font-mono omori-param-sub">
               <span>Method: {sequenceDetails?.omori_fit?.method === "maximum_likelihood_estimation" ? "MLE Fitted" : "Regional Prior"}</span>
               {sequenceDetails?.geometry?.strike_deg !== undefined && (
                 <span>Strike θ: {sequenceDetails.geometry.strike_deg.toFixed(1)}°</span>
@@ -344,7 +359,7 @@ export default function RiskPanel({
           </div>
 
           <div className="legend-disclaimer">
-            💡 Notice: Decay parameters estimate statistical aftershock frequency under inhomogeneous Poisson assumptions. Not an exact prediction of single event timing.
+            💡 Decay parameters estimate statistical aftershock frequency under inhomogeneous Poisson assumptions.
           </div>
         </div>
       )}
@@ -353,32 +368,49 @@ export default function RiskPanel({
       {guidance?.sectors && guidance.sectors.length > 0 && (
         <div className="sectors-card">
           <div className="sectors-header">
-            <span className="sectors-icon">🎯</span>
-            <h4 className="sectors-title">Emergency Response Sectors</h4>
-            <span className="sectors-count font-mono">{guidance.sectors.length} sectors</span>
+            <div className="sectors-title-wrap">
+              <span className="sectors-icon">🎯</span>
+              <h4 className="sectors-title">Emergency Response Sectors</h4>
+            </div>
+            <span className="sectors-count font-mono">
+              {guidance.sectors.length} {guidance.sectors.length === 1 ? "sector" : "sectors"}
+            </span>
           </div>
-          <ul className="sectors-list">
+          <div className="sectors-list">
             {guidance.sectors.map((sec, idx) => (
-              <li key={idx} className={`sector-item zone-${sec.public_zone}`}>
+              <div key={idx} className={`sector-item zone-${sec.public_zone.toLowerCase()}`}>
                 <div className="sector-info-row">
-                  <span className="sector-place font-bold">{sec.place}</span>
-                  <span className={`sector-zone-badge zone-${sec.public_zone}`}>
-                    {sec.public_zone}
-                  </span>
+                  <div className="sector-place-wrap">
+                    <span className="sector-bullet-indicator" />
+                    <span className="sector-place">{sec.place}</span>
+                  </div>
+                  <div className="sector-badges-cluster">
+                    <span className={`sector-zone-badge zone-${sec.public_zone.toLowerCase()}`}>
+                      {sec.public_zone.toUpperCase()}
+                    </span>
+                    <span className={`sector-excavation action-${sec.excavation.toLowerCase().replace(/\s+/g, '-')}`}>
+                      {sec.excavation.toUpperCase()}
+                    </span>
+                  </div>
                 </div>
-                <div className="sector-details-row font-mono text-xs">
-                  <span>P(M4+): {(sec.probability_24h * 100).toFixed(1)}%</span>
+                
+                <div className="sector-details-row font-mono">
+                  <span className="sector-stat-chip">
+                    <span className="chip-key">P(M4+):</span>
+                    <span className="chip-val font-bold">{(sec.probability_24h * 100).toFixed(1)}%</span>
+                  </span>
                   {sec.probability_m5_24h !== undefined && (
-                    <span>P(M5+): {(sec.probability_m5_24h * 100).toFixed(1)}%</span>
+                    <span className="sector-stat-chip">
+                      <span className="chip-key">P(M5+):</span>
+                      <span className="chip-val font-bold">{(sec.probability_m5_24h * 100).toFixed(1)}%</span>
+                    </span>
                   )}
-                  <span className={`sector-excavation action-${sec.excavation}`}>
-                    {sec.excavation.toUpperCase()}
-                  </span>
                 </div>
+                
                 <p className="sector-action-text">{sec.action}</p>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
