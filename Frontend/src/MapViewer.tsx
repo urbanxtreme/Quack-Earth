@@ -36,7 +36,7 @@ interface HeatmapStats {
   centerLon: number;
 }
 
-// Proxied through Vite dev server to guarantee 100% CORS & HTTP Range support on any local port
+// In development, use local Vite proxy. In production (hosted static site), use direct protomaps CDN.
 const getPmtilesUrl = () => {
   return "https://latest.protomaps.com/v4.pmtiles";
 };
@@ -185,11 +185,6 @@ export default function MapViewer({
   const sequence = useMemo(() => impactSequence(events), [events]);
   const sequenceRef = useRef(sequence);
   sequenceRef.current = sequence;
-  const aftershockCount = useMemo(
-    () => sequence.filter((event) => shockRole(event, sequence) === "aftershock").length,
-    [sequence],
-  );
-
   // Automated playback timer
   useEffect(() => {
     let timer: any = null;
@@ -211,12 +206,6 @@ export default function MapViewer({
   const [showEventsLayer, setShowEventsLayer] = useState<boolean>(true);
   const [showHeatmapLayer, setShowHeatmapLayer] = useState<boolean>(true);
   const [isLegendExpanded, setIsLegendExpanded] = useState<boolean>(true);
-
-  const [viewportInfo, setViewportInfo] = useState<{ lng: string; lat: string; zoom: string }>({
-    lng: "0.00",
-    lat: "20.00",
-    zoom: "2.5",
-  });
 
   const getStyleForTheme = (themeName: "light" | "dark" | "grayscale"): maplibregl.StyleSpecification => {
     const spriteVariant = themeName === "dark" ? "dark" : "light";
@@ -612,16 +601,6 @@ export default function MapViewer({
           mapRef.current.resize();
         }
       }, 2000);
-
-      map.on("move", () => {
-        const center = map.getCenter();
-        const zoom = map.getZoom();
-        setViewportInfo({
-          lng: center.lng.toFixed(2),
-          lat: center.lat.toFixed(2),
-          zoom: zoom.toFixed(1),
-        });
-      });
 
       mapRef.current = map;
 

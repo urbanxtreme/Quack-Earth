@@ -38,9 +38,6 @@ export default function RiskPanel({
   setTimeWindow,
   onRecalculate,
   onOpenSitRep,
-  selectedMainshock,
-  sequenceDetails,
-  isSeqLoading,
 }: RiskPanelProps) {
   const [radiusKm, setRadiusKm] = useState<number>(50);
 
