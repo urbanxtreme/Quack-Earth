@@ -199,7 +199,7 @@ export default function MapViewer({
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
-  const [activeLocation, setActiveLocation] = useState<GeocodedLocation | null>(null);
+  // const [activeLocation, setActiveLocation] = useState<GeocodedLocation | null>(null);
 
   // Layer visibility toggles
   const [showEventsLayer, setShowEventsLayer] = useState<boolean>(true);
@@ -1072,7 +1072,7 @@ export default function MapViewer({
         return;
       }
 
-      setActiveLocation(location);
+      // setActiveLocation(location);
 
       const map = mapRef.current;
       if (map) {
@@ -1511,7 +1511,7 @@ export default function MapViewer({
     onChangeMinMagnitude?.(m);
   };
 
-  const presetPlaces = ["Turkey", "Tokyo", "San Francisco", "Chile", "Nepal", "Kochi"];
+  // const presetPlaces = ["Turkey", "Tokyo", "San Francisco", "Chile", "Nepal", "Kochi"];
 
   return (
     <div className="map-view-container">
@@ -1566,7 +1566,7 @@ export default function MapViewer({
           </form>
 
           {/* Quick Presets */}
-          <div className="search-presets">
+          {/* <div className="search-presets">
             <span className="presets-label">Quick:</span>
             {presetPlaces.map((place) => (
               <button
@@ -1581,7 +1581,7 @@ export default function MapViewer({
                 {place}
               </button>
             ))}
-          </div>
+          </div> */}
 
           {/* Live Feedback Toast */}
           {searchFeedback && (
