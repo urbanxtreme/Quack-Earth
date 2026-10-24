@@ -254,7 +254,36 @@ def simulate_event_aftershocks(event_id: str):
     repository = current_app.extensions["event_repository"]
     main_event = repository.get_event(event_id)
     if not main_event:
-        return error(f"Event {event_id} not found", 404)
+        # Check scenario presets
+        from app.routes.scenarios import SCENARIOS
+        for sc in SCENARIOS:
+            for ev_dict in sc.get("events", []):
+                if ev_dict.get("id") == event_id:
+                    from app.models.event import EarthquakeEvent
+                    main_event = EarthquakeEvent.from_dict(ev_dict)
+                    break
+            if main_event:
+                break
+
+    if not main_event:
+        # Check query param fallback
+        try:
+            lat = float(request.args.get("lat"))
+            lon = float(request.args.get("lon"))
+            mag = float(request.args.get("magnitude", 5.5))
+            from app.models.event import EarthquakeEvent
+            main_event = EarthquakeEvent(
+                id=event_id,
+                time=datetime.now(timezone.utc),
+                lat=lat,
+                lon=lon,
+                magnitude=mag,
+                depth_km=10.0,
+                place=f"Magnitude {mag} Focus",
+                source="usgs",
+            )
+        except (TypeError, ValueError):
+            return error(f"Event {event_id} not found", 404)
 
     try:
         days = float(request.args.get("days", 7.0))

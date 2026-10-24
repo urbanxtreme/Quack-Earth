@@ -263,8 +263,8 @@ export default function MapViewer({
   // Fetch 7-day aftershock sequence simulation whenever mainshock or selected point changes
   useEffect(() => {
     let cancelled = false;
-    const targetLat = targetCoords ? targetCoords.lat : (effectiveMainshock ? effectiveMainshock.lat : 35.68);
-    const targetLon = targetCoords ? targetCoords.lon : (effectiveMainshock ? effectiveMainshock.lon : 139.76);
+    const targetLat = effectiveMainshock ? effectiveMainshock.lat : (targetCoords ? targetCoords.lat : 35.68);
+    const targetLon = effectiveMainshock ? effectiveMainshock.lon : (targetCoords ? targetCoords.lon : 139.76);
     const mag = effectiveMainshock ? effectiveMainshock.magnitude : 5.5;
 
     simulateAftershocks({
@@ -314,6 +314,12 @@ export default function MapViewer({
     }
     return identifiedAftershocks;
   }, [simulationData, currentSimDay, timelinePercent, identifiedAftershocks]);
+
+  // Most recent aftershock occurring at currentSimDay
+  const latestAftershock = useMemo<SimulatedAftershock | EarthquakeEvent | null>(() => {
+    if (displayedSimAftershocks.length === 0) return null;
+    return displayedSimAftershocks[displayedSimAftershocks.length - 1];
+  }, [displayedSimAftershocks]);
 
   // Automated playback timer (7-day simulation playback)
   useEffect(() => {
@@ -418,27 +424,33 @@ export default function MapViewer({
   const buildEventsGeoJSON = useCallback((evList: (EarthquakeEvent | SimulatedAftershock)[]): FeatureCollection<Point> => {
     return {
       type: "FeatureCollection",
-      features: evList.map((e) => ({
-        type: "Feature",
-        id: e.id,
-        geometry: {
-          type: "Point",
-          coordinates: [e.lon, e.lat],
-        },
-        properties: {
+      features: evList.map((e) => {
+        const isSim = (e as any).is_simulated ?? false;
+        const dayOff = (e as any).day_offset ?? 0;
+        const isRecent = (currentSimDay - dayOff >= 0) && (currentSimDay - dayOff <= 0.35);
+        return {
+          type: "Feature",
           id: e.id,
-          mag: e.magnitude,
-          place: e.place || "Seismic Event",
-          time: e.time,
-          depth: e.depth_km ?? 10,
-          source: e.source || "usgs",
-          is_simulated: (e as any).is_simulated ?? false,
-          day_offset: (e as any).day_offset ?? 0,
-          omori_rate_at_t: (e as any).omori_rate_at_t ?? null,
-        },
-      })),
+          geometry: {
+            type: "Point",
+            coordinates: [e.lon, e.lat],
+          },
+          properties: {
+            id: e.id,
+            mag: e.magnitude,
+            place: e.place || "Seismic Event",
+            time: e.time,
+            depth: e.depth_km ?? 10,
+            source: e.source || "usgs",
+            is_simulated: isSim,
+            day_offset: dayOff,
+            omori_rate_at_t: (e as any).omori_rate_at_t ?? null,
+            is_recent: isRecent,
+          },
+        };
+      }),
     };
-  }, []);
+  }, [currentSimDay]);
 
   // Update or attach the Events circles layer on the map
   const updateEventsLayer = useCallback((evList: EarthquakeEvent[]) => {
@@ -520,11 +532,12 @@ export default function MapViewer({
         const coords = (feature.geometry as Point).coordinates;
 
         const foundEvent = evList.find((ev) => ev.id === props.id);
-        if (foundEvent && onSelectEvent) {
-          onSelectEvent(foundEvent);
+        if (foundEvent) {
+          if (onSelectEvent) onSelectEvent(foundEvent);
+          if (onSelectMainshock) onSelectMainshock(foundEvent);
         }
 
-        new maplibregl.Popup({ offset: 15 })
+        const popup = new maplibregl.Popup({ offset: 15 })
           .setLngLat([coords[0], coords[1]])
           .setHTML(
             `<div class="epicenter-popup">
@@ -532,9 +545,26 @@ export default function MapViewer({
               <p><strong>Depth:</strong> ${props.depth} km</p>
               <p><strong>Time:</strong> ${new Date(props.time).toLocaleString()}</p>
               <span class="popup-tag">${props.source === "user_report" ? "Local Report" : "USGS ComCat"}</span>
+              <div style="margin-top: 8px;">
+                <button class="btn-popup-sim" data-event-id="${props.id}">
+                  🔮 Simulate 7-Day Aftershocks
+                </button>
+              </div>
             </div>`
           )
           .addTo(map);
+
+        setTimeout(() => {
+          const btn = document.querySelector(`button[data-event-id="${props.id}"]`);
+          if (btn && foundEvent) {
+            btn.addEventListener("click", () => {
+              if (onSelectMainshock) onSelectMainshock(foundEvent);
+              setTimelinePercent(0);
+              setIsPlayingTimeline(true);
+              popup.remove();
+            });
+          }
+        }, 80);
       });
 
       map.on("mouseenter", "events-circles", () => {
@@ -544,7 +574,7 @@ export default function MapViewer({
         map.getCanvas().style.cursor = "";
       });
     }
-  }, [buildEventsGeoJSON, onSelectEvent]);
+  }, [buildEventsGeoJSON, onSelectEvent, onSelectMainshock]);
 
   // Update or attach the Tectonic Faults layer
   const updateFaultsLayer = useCallback((faultsGjson: FeatureCollection<LineString>) => {
@@ -681,6 +711,29 @@ export default function MapViewer({
             "#c084fc",
           ],
           "circle-opacity": 0.9,
+        },
+      });
+
+      // Active expanding shockwave pulse for newly simulated aftershocks
+      map.addLayer({
+        id: "aftershocks-active-wave",
+        type: "circle",
+        source: "aftershocks-source",
+        filter: ["==", ["get", "is_recent"], true],
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["get", "mag"],
+            3.0, 18,
+            5.0, 30,
+            7.0, 52,
+          ],
+          "circle-color": "rgba(251, 146, 60, 0.25)",
+          "circle-stroke-width": 3,
+          "circle-stroke-color": "#fb923c",
+          "circle-stroke-opacity": 0.95,
+          "circle-blur": 0.35,
         },
       });
 
@@ -1203,6 +1256,9 @@ export default function MapViewer({
       if (map.getLayer("aftershocks-glow")) {
         map.setLayoutProperty("aftershocks-glow", "visibility", showAftershocksLayer ? "visible" : "none");
       }
+      if (map.getLayer("aftershocks-active-wave")) {
+        map.setLayoutProperty("aftershocks-active-wave", "visibility", showAftershocksLayer ? "visible" : "none");
+      }
       if (map.getLayer("events-circles")) {
         map.setLayoutProperty("events-circles", "visibility", showEventsLayer ? "visible" : "none");
       }
@@ -1226,6 +1282,21 @@ export default function MapViewer({
     showMainshockLayer,
     mapLoaded,
   ]);
+
+  // Sync camera and auto-rewind simulation when mainshock changes
+  useEffect(() => {
+    if (selectedMainshock && mapRef.current) {
+      mapRef.current.flyTo({
+        center: [selectedMainshock.lon, selectedMainshock.lat],
+        zoom: 7.2,
+        speed: 1.4,
+        curve: 1.2,
+        essential: true,
+      });
+      setTimelinePercent(0);
+      setIsPlayingTimeline(true);
+    }
+  }, [selectedMainshock]);
 
   // Sync selected event camera fly-to
   useEffect(() => {
@@ -1434,14 +1505,14 @@ export default function MapViewer({
               title="Select sequence mainshock"
             >
               <option value="">
-                {effectiveMainshock ? `★ Auto: M${effectiveMainshock.magnitude.toFixed(1)} (${effectiveMainshock.place?.slice(0, 15)}...)` : "-- Auto: No Mainshock --"}
+                {effectiveMainshock ? `★ Mainshock: M${effectiveMainshock.magnitude.toFixed(1)} (${effectiveMainshock.place?.slice(0, 18)}...)` : "-- Select Real USGS Earthquake --"}
               </option>
               {events
-                .filter((ev) => ev.magnitude >= 4.5)
+                .filter((ev) => ev.magnitude >= 4.0)
                 .sort((a, b) => b.magnitude - a.magnitude)
                 .map((ev) => (
                   <option key={ev.id} value={ev.id}>
-                    M{ev.magnitude.toFixed(1)} - {ev.place?.slice(0, 20) || ev.id}
+                    {ev.source === "user_report" ? "[Local]" : "[USGS]"} M{ev.magnitude.toFixed(1)} - {ev.place?.slice(0, 26) || ev.id}
                   </option>
                 ))}
             </select>
@@ -1708,7 +1779,7 @@ export default function MapViewer({
               }}
               title={isPlayingTimeline ? "Pause sequence simulation" : "Play 7-day aftershock sequence simulation"}
             >
-              {isPlayingTimeline ? "⏸ Pause Simulation" : "▶ Simulate 7 Days"}
+              {isPlayingTimeline ? "⏸ Pause" : "▶ Simulate"}
             </button>
             <button
               type="button"
@@ -1719,7 +1790,7 @@ export default function MapViewer({
               }}
               title="Reset simulation to T-0 (Day 0)"
             >
-              ↺ T-0 (Day 0)
+              ↺ Day 0
             </button>
             <button
               type="button"
@@ -1730,25 +1801,35 @@ export default function MapViewer({
               }}
               title="Jump to end of 7-day simulation horizon"
             >
-              ⏩ Day 7 (+168h)
+              ⏩ Day 7
             </button>
           </div>
+
+          {/* Center: Latest Simulated Aftershock Event */}
+          {latestAftershock && (
+            <div className="timeline-dock-center">
+              <span className="timeline-latest-shock-chip font-mono" title="Most recent predicted aftershock in simulation">
+                💥 <strong className="text-orange">M{latestAftershock.magnitude.toFixed(1)}</strong>
+                <span className="chip-place"> {latestAftershock.place ? latestAftershock.place.slice(0, 16) : "Rupture"}</span>
+                <span className="text-dim"> (+{(((latestAftershock as any).day_offset ?? 0) * 24).toFixed(0)}h)</span>
+              </span>
+            </div>
+          )}
 
           {/* Right: Shock Counter Telemetry & Instantaneous Omori Rate */}
           <div className="timeline-dock-right">
             <span className="timeline-shock-badge font-mono">
-              📅 <strong className="text-cyan">Day {currentSimDay.toFixed(1)}</strong> of 7.0d (
-              <span className="text-dim">+{(currentSimDay * 24).toFixed(0)}h</span>)
-              &nbsp;|&nbsp;
-              ⚡ <strong className="text-orange">{displayedSimAftershocks.length}</strong> aftershocks
-              &nbsp;|&nbsp;
+              📅 <strong className="text-cyan">Day {currentSimDay.toFixed(1)}</strong>/7d (<span className="text-dim">+{(currentSimDay * 24).toFixed(0)}h</span>)
+              &nbsp;·&nbsp;
+              ⚡ <strong className="text-orange">{displayedSimAftershocks.length}</strong> quakes
+              &nbsp;·&nbsp;
               <span className="text-purple">
-                λ(t): {(
+                λ: {(
                   simulationData?.omori_parameters
                     ? simulationData.omori_parameters.k /
                       ((currentSimDay + simulationData.omori_parameters.c_days) ** simulationData.omori_parameters.p)
                     : 0.45
-                ).toFixed(2)}/day
+                ).toFixed(1)}/d
               </span>
             </span>
           </div>

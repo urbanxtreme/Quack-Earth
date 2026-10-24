@@ -1301,7 +1301,7 @@ body {
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
-  width: min(840px, calc(100% - 32px));
+  width: min(940px, calc(100% - 32px));
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -1394,6 +1394,8 @@ body {
   justify-content: center;
   flex: 1;
   min-width: 0;
+  padding: 0 8px;
+  overflow: hidden;
 }
 
 .timeline-shock-badge {
@@ -1428,8 +1430,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  flex: 1;
-  min-width: 0;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 .map-viewport-hud {
@@ -3455,4 +3458,89 @@ select.glass-input option {
   margin-top: 4px;
   font-size: 0.68rem;
   color: var(--text-muted);
+}
+
+/* Event List Simulation Action Button */
+.event-card-actions {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.btn-event-simulate {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(56, 189, 248, 0.2));
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.btn-event-simulate:hover {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.45), rgba(56, 189, 248, 0.35));
+  color: #ffffff;
+  border-color: #c084fc;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Popup Simulation Trigger Button */
+.btn-popup-sim {
+  width: 100%;
+  background: linear-gradient(135deg, #a855f7, #6366f1);
+  color: #ffffff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.4);
+}
+
+.btn-popup-sim:hover {
+  background: linear-gradient(135deg, #c084fc, #818cf8);
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.7);
+  transform: translateY(-1px);
+}
+
+/* Bottom Console Latest Aftershock Ticker Chip */
+.timeline-latest-shock-chip {
+  background: rgba(251, 146, 60, 0.15);
+  border: 1px solid rgba(251, 146, 60, 0.45);
+  color: #fed7aa;
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  animation: pulseGlow 2.5s infinite ease-in-out;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.85;
+    box-shadow: 0 0 4px rgba(251, 146, 60, 0.2);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 10px rgba(251, 146, 60, 0.55);
+  }
+}
+
+.timeline-latest-shock-chip .chip-place {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

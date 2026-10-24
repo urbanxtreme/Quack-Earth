@@ -5,6 +5,7 @@ interface EventsPanelProps {
   events: EarthquakeEvent[];
   selectedEventId: string | null;
   onSelectEvent: (event: EarthquakeEvent) => void;
+  onSimulateEvent?: (event: EarthquakeEvent) => void;
   isLoading: boolean;
   timeWindowHours: number;
   setTimeWindowHours: (hours: number) => void;
@@ -16,6 +17,7 @@ export default function EventsPanel({
   events,
   selectedEventId,
   onSelectEvent,
+  onSimulateEvent,
   isLoading,
   timeWindowHours,
   setTimeWindowHours,
@@ -209,6 +211,24 @@ export default function EventsPanel({
                           👥 Citizen Report
                         </span>
                       )}
+                    </div>
+
+                    <div className="event-card-actions">
+                      <button
+                        type="button"
+                        className="btn-event-simulate"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onSimulateEvent) {
+                            onSimulateEvent(event);
+                          } else {
+                            onSelectEvent(event);
+                          }
+                        }}
+                        title="Simulate 7-day aftershocks with model on the map"
+                      >
+                        🔮 Simulate 7d
+                      </button>
                     </div>
                   </div>
 

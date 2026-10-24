@@ -135,9 +135,19 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
   // Handle selecting an event from list
   const handleSelectEvent = (event: EarthquakeEvent) => {
     setSelectedEvent(event);
+    setSelectedMainshock(event);
     setInspectedCoords({ lat: event.lat, lon: event.lon });
     setActiveLocationLabel(event.place || `M${event.magnitude} Event`);
-    loadRisk({ lat: event.lat, lon: event.lon });
+    loadRisk({ lat: event.lat, lon: event.lon }, event);
+  };
+
+  // Handle explicitly simulating aftershocks for an event
+  const handleSimulateEvent = (event: EarthquakeEvent) => {
+    handleSelectEvent(event);
+    setActiveTab("map");
+    if (window.innerWidth <= 768) {
+      setIsSidebarOpen(false);
+    }
   };
 
   // Handle map click
@@ -371,6 +381,7 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
                   events={events}
                   selectedEventId={selectedEvent?.id || null}
                   onSelectEvent={handleSelectEvent}
+                  onSimulateEvent={handleSimulateEvent}
                   isLoading={isEventsLoading}
                   timeWindowHours={timeWindowHours}
                   setTimeWindowHours={setTimeWindowHours}
