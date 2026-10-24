@@ -204,7 +204,8 @@ export default function MapViewer({
   // Layer visibility toggles
   const [showEventsLayer, setShowEventsLayer] = useState<boolean>(true);
   const [showMainshockLayer, setShowMainshockLayer] = useState<boolean>(true);
-  const [showAftershocksLayer, setShowAftershocksLayer] = useState<boolean>(true);
+  const [showPredictedAftershocks, setShowPredictedAftershocks] = useState<boolean>(true);
+  const [showObservedAftershocks, setShowObservedAftershocks] = useState<boolean>(true);
   const [showFaultsLayer, setShowFaultsLayer] = useState<boolean>(true);
   const [showForecastHeatmap, setShowForecastHeatmap] = useState<boolean>(true);
   const [isLegendExpanded, setIsLegendExpanded] = useState<boolean>(true);
@@ -306,14 +307,46 @@ export default function MapViewer({
     });
   }, [effectiveMainshock, displayedEvents]);
 
+  // Observed and predicted counts
+  const observedCount = useMemo(() => {
+    if (simulationData?.aftershocks) {
+      return simulationData.aftershocks.filter((a) => !a.is_simulated).length;
+    }
+    return identifiedAftershocks.length;
+  }, [simulationData, identifiedAftershocks]);
+
+  const predictedCount = useMemo(() => {
+    if (simulationData?.aftershocks) {
+      return simulationData.aftershocks.filter((a) => a.is_simulated).length;
+    }
+    return 0;
+  }, [simulationData]);
+
   // Aftershocks visible up to currentSimDay (showing up to 7 days of aftershocks when simulating)
   const displayedSimAftershocks = useMemo<(EarthquakeEvent | SimulatedAftershock)[]>(() => {
+    let list: (EarthquakeEvent | SimulatedAftershock)[] = [];
     if (simulationData?.aftershocks && simulationData.aftershocks.length > 0) {
-      if (timelinePercent >= 100) return simulationData.aftershocks;
-      return simulationData.aftershocks.filter((a) => a.day_offset <= currentSimDay);
+      list = timelinePercent >= 100
+        ? simulationData.aftershocks
+        : simulationData.aftershocks.filter((a) => a.day_offset <= currentSimDay);
+    } else {
+      list = identifiedAftershocks;
     }
-    return identifiedAftershocks;
-  }, [simulationData, currentSimDay, timelinePercent, identifiedAftershocks]);
+
+    return list.filter((a) => {
+      const isSim = (a as any).is_simulated ?? false;
+      if (isSim && !showPredictedAftershocks) return false;
+      if (!isSim && !showObservedAftershocks) return false;
+      return true;
+    });
+  }, [
+    simulationData,
+    currentSimDay,
+    timelinePercent,
+    identifiedAftershocks,
+    showPredictedAftershocks,
+    showObservedAftershocks,
+  ]);
 
   // Most recent aftershock occurring at currentSimDay
   const latestAftershock = useMemo<SimulatedAftershock | EarthquakeEvent | null>(() => {
@@ -737,7 +770,7 @@ export default function MapViewer({
         },
       });
 
-      map.on("click", "aftershocks-rings", (e) => {
+      const handleAftershockClick = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
         if (!e.features || e.features.length === 0) return;
         const feature = e.features[0];
         const props = feature.properties || {};
@@ -746,28 +779,38 @@ export default function MapViewer({
         const dayOff = typeof props.day_offset === "number" ? props.day_offset : 0;
         const rateAtT = typeof props.omori_rate_at_t === "number" ? props.omori_rate_at_t : null;
 
-        new maplibregl.Popup({ offset: 15 })
+        new maplibregl.Popup({ offset: 15, closeButton: true })
           .setLngLat([coords[0], coords[1]])
           .setHTML(
             `<div class="aftershock-popup">
               <h4>${isSim ? "🔮 PROJECTED AFTERSHOCK" : "💫 OBSERVED AFTERSHOCK"}: M ${props.mag}</h4>
               <p><strong>Place:</strong> ${props.place}</p>
-              <p><strong>Time:</strong> ${new Date(props.time).toLocaleString()}</p>
-              <p><strong>Sequence Timing:</strong> T+${dayOff.toFixed(2)} days (+${(dayOff * 24).toFixed(1)}h)</p>
+              <p><strong>Coordinates:</strong> ${coords[1].toFixed(4)}°N, ${coords[0].toFixed(4)}°E</p>
+              <p><strong>Estimated Magnitude:</strong> M ${props.mag}</p>
+              <p><strong>Forecast Window:</strong> T+${dayOff.toFixed(2)} days (+${(dayOff * 24).toFixed(1)}h)</p>
               <p><strong>Depth:</strong> ${props.depth} km</p>
               ${rateAtT !== null ? `<p><strong>Omori Rate &lambda;(t):</strong> ${rateAtT.toFixed(3)}/day</p>` : ""}
               <span class="popup-tag ${isSim ? "simulated-tag" : "aftershock-tag"}">
-                ${isSim ? "Omori Inhomogeneous Poisson Projection (7d Sim)" : "USGS Catalog Verified"}
+                ${isSim ? "Omori Inhomogeneous Poisson Projection (Probabilistic)" : "USGS Catalog Verified"}
               </span>
             </div>`
           )
           .addTo(map);
-      });
+      };
+
+      map.on("click", "aftershocks-rings", handleAftershockClick);
+      map.on("click", "aftershocks-active-wave", handleAftershockClick);
 
       map.on("mouseenter", "aftershocks-rings", () => {
         map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", "aftershocks-rings", () => {
+        map.getCanvas().style.cursor = "";
+      });
+      map.on("mouseenter", "aftershocks-active-wave", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "aftershocks-active-wave", () => {
         map.getCanvas().style.cursor = "";
       });
     }
@@ -1250,14 +1293,15 @@ export default function MapViewer({
       if (map.getLayer("faults-glow")) {
         map.setLayoutProperty("faults-glow", "visibility", showFaultsLayer ? "visible" : "none");
       }
+      const showAnyAftershocks = showPredictedAftershocks || showObservedAftershocks;
       if (map.getLayer("aftershocks-rings")) {
-        map.setLayoutProperty("aftershocks-rings", "visibility", showAftershocksLayer ? "visible" : "none");
+        map.setLayoutProperty("aftershocks-rings", "visibility", showAnyAftershocks ? "visible" : "none");
       }
       if (map.getLayer("aftershocks-glow")) {
-        map.setLayoutProperty("aftershocks-glow", "visibility", showAftershocksLayer ? "visible" : "none");
+        map.setLayoutProperty("aftershocks-glow", "visibility", showAnyAftershocks ? "visible" : "none");
       }
       if (map.getLayer("aftershocks-active-wave")) {
-        map.setLayoutProperty("aftershocks-active-wave", "visibility", showAftershocksLayer ? "visible" : "none");
+        map.setLayoutProperty("aftershocks-active-wave", "visibility", showAnyAftershocks ? "visible" : "none");
       }
       if (map.getLayer("events-circles")) {
         map.setLayoutProperty("events-circles", "visibility", showEventsLayer ? "visible" : "none");
@@ -1277,7 +1321,8 @@ export default function MapViewer({
   }, [
     showForecastHeatmap,
     showFaultsLayer,
-    showAftershocksLayer,
+    showPredictedAftershocks,
+    showObservedAftershocks,
     showEventsLayer,
     showMainshockLayer,
     mapLoaded,
@@ -1596,11 +1641,19 @@ export default function MapViewer({
             </button>
             <button
               type="button"
-              className={`layer-btn ${showAftershocksLayer ? "active" : ""}`}
-              onClick={() => setShowAftershocksLayer((prev) => !prev)}
-              title="Toggle Identified Aftershock Rings"
+              className={`layer-btn ${showPredictedAftershocks ? "active" : ""}`}
+              onClick={() => setShowPredictedAftershocks((prev) => !prev)}
+              title="Toggle Model-Predicted Aftershocks (7-day simulation)"
             >
-              💫 Aftershocks ({identifiedAftershocks.length})
+              🔮 Predicted ({predictedCount})
+            </button>
+            <button
+              type="button"
+              className={`layer-btn ${showObservedAftershocks ? "active" : ""}`}
+              onClick={() => setShowObservedAftershocks((prev) => !prev)}
+              title="Toggle Observed USGS Aftershocks in sequence"
+            >
+              💫 Observed ({observedCount})
             </button>
             <button
               type="button"
