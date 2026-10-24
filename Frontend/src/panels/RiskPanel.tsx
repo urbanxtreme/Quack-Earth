@@ -186,13 +186,6 @@ export default function RiskPanel({
             </button>
             <button
               type="button"
-              className={`toggle-chip ${timeWindow === "72h" ? "active" : ""}`}
-              onClick={() => setTimeWindow("72h")}
-            >
-              72h
-            </button>
-            <button
-              type="button"
               className={`toggle-chip ${timeWindow === "7d" ? "active" : ""}`}
               onClick={() => setTimeWindow("7d")}
             >
@@ -293,61 +286,6 @@ export default function RiskPanel({
         </div>
       </div>
 
-      {/* Sequence Breakdown & Modified Omori-Utsu Model Parameters */}
-      {(selectedMainshock || sequenceDetails) && (
-        <div className="sequence-analysis-card">
-          <div className="sequence-header-row">
-            <h4 className="sequence-title">
-              <span>🔬 Sequence & Omori Law</span>
-            </h4>
-            <span className="count-pill">
-              {isSeqLoading ? "Fitting..." : sequenceDetails?.confidence ? `${sequenceDetails.confidence.toUpperCase()}` : "ACTIVE"}
-            </span>
-          </div>
-
-          {selectedMainshock && (
-            <div className="seq-mainshock-meta font-mono text-xs text-muted">
-              ★ Mainshock: M{selectedMainshock.magnitude} ({selectedMainshock.place || "Epicenter"})
-            </div>
-          )}
-
-          <div className="sequence-stats-grid">
-            <div className="seq-stat-box">
-              <span className="seq-stat-val font-mono">{sequenceDetails?.foreshock_count ?? 0}</span>
-              <span className="seq-stat-lbl">Foreshocks</span>
-            </div>
-            <div className="seq-stat-box">
-              <span className="seq-stat-val font-mono text-purple">{sequenceDetails?.aftershock_count ?? 0}</span>
-              <span className="seq-stat-lbl">Aftershocks</span>
-            </div>
-            <div className="seq-stat-box">
-              <span className="seq-stat-val font-mono text-cyan">
-                {sequenceDetails?.search_radius_km ? `${sequenceDetails.search_radius_km.toFixed(0)} km` : "Adaptive"}
-              </span>
-              <span className="seq-stat-lbl">Search Radius</span>
-            </div>
-          </div>
-
-          <div className="omori-formula-box">
-            <div className="omori-formula-title font-mono">r(t) = K / (t + c)^p</div>
-            <div className="omori-param-row font-mono">
-              <span>K = {sequenceDetails?.omori_fit?.k?.toFixed(2) ?? "1.85"}</span>
-              <span>c = {sequenceDetails?.omori_fit?.c_days?.toFixed(3) ?? "0.080"}d</span>
-              <span>p = {sequenceDetails?.omori_fit?.p?.toFixed(2) ?? "1.05"}</span>
-            </div>
-            <div className="omori-param-row font-mono omori-param-sub">
-              <span>Method: {sequenceDetails?.omori_fit?.method === "maximum_likelihood_estimation" ? "MLE Fitted" : "Regional Prior"}</span>
-              {sequenceDetails?.geometry?.strike_deg !== undefined && (
-                <span>Strike θ: {sequenceDetails.geometry.strike_deg.toFixed(1)}°</span>
-              )}
-            </div>
-          </div>
-
-          <div className="legend-disclaimer">
-            💡 Decay parameters estimate statistical aftershock frequency under inhomogeneous Poisson assumptions.
-          </div>
-        </div>
-      )}
 
       {/* Ranked Emergency Sectors */}
       {guidance?.sectors && guidance.sectors.length > 0 && (
