@@ -1301,7 +1301,7 @@ body {
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
-  width: min(640px, calc(100% - 32px));
+  width: min(840px, calc(100% - 32px));
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -1321,7 +1321,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
 }
 
@@ -1397,13 +1397,16 @@ body {
 }
 
 .timeline-shock-badge {
-  font-size: 0.72rem;
+  font-size: 0.73rem;
   color: var(--text-main);
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.45);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-full);
-  padding: 3px 10px;
+  padding: 3px 12px;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .timeline-pct-tag {
@@ -1419,32 +1422,40 @@ body {
   gap: 6px;
   flex-shrink: 0;
   font-size: 0.7rem;
-  color: var(--text-muted);
 }
 
-.dock-coord-val {
-  color: #cbd5e1;
+.timeline-dock-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+  min-width: 0;
 }
 
-.dock-zoom-badge {
-  background: rgba(56, 189, 248, 0.15);
-  color: var(--accent-cyan);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  padding: 1px 5px;
-  border-radius: var(--radius-xs);
-  font-size: 0.65rem;
-  font-weight: 700;
-}
-
-.dock-tip-pill {
-  color: var(--accent-cyan);
-  font-weight: 600;
-  font-size: 0.68rem;
-  background: rgba(56, 189, 248, 0.1);
-  padding: 2px 7px;
+.map-viewport-hud {
+  position: absolute;
+  bottom: 16px;
+  left: 90px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(8, 13, 24, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-glass);
   border-radius: var(--radius-full);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  white-space: nowrap;
+  padding: 3px 10px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+
+@media (max-width: 1024px) {
+  .map-viewport-hud {
+    display: none;
+  }
 }
 
 /* Bottom Sequence Track */
@@ -3164,6 +3175,13 @@ select.glass-input option {
 .popup-tag.aftershock-tag {
   background: rgba(168, 85, 247, 0.2);
   color: #c084fc;
+}
+
+.popup-tag.simulated-tag,
+.popup-tag.projected-tag {
+  background: rgba(249, 115, 22, 0.25);
+  color: #fb923c;
+  border: 1px solid rgba(249, 115, 22, 0.4);
 }
 
 /* Forecast Window Toggle Row */

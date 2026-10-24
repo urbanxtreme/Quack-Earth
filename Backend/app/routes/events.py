@@ -248,6 +248,38 @@ def get_event_sequence(event_id: str):
         return error(f"Sequence analysis failed: {exc}", 500)
 
 
+@events_bp.get("/events/<event_id>/simulate-aftershocks")
+def simulate_event_aftershocks(event_id: str):
+    """Generate up to 7 days of probabilistic aftershocks combining observed and Omori-projected arrivals."""
+    repository = current_app.extensions["event_repository"]
+    main_event = repository.get_event(event_id)
+    if not main_event:
+        return error(f"Event {event_id} not found", 404)
+
+    try:
+        days = float(request.args.get("days", 7.0))
+        min_mag = float(request.args.get("min_magnitude", 3.0))
+        seed = int(request.args.get("seed", 42))
+
+        from quack_risk.sequence import identify_sequence, simulate_aftershock_sequence
+
+        all_events = repository.list_events(limit=5000)
+        seq = identify_sequence(all_events, main_event)
+
+        sim_res = simulate_aftershock_sequence(
+            mainshock=main_event,
+            omori_fit=seq.omori_fit,
+            geometry=seq.geometry,
+            duration_days=days,
+            min_magnitude=min_mag,
+            observed_aftershocks=seq.aftershocks,
+            random_seed=seed,
+        )
+        return sim_res, 200
+    except Exception as exc:
+        return error(f"Aftershock simulation failed: {exc}", 500)
+
+
 @events_bp.post("/local-event")
 def add_local_event():
     body = request.get_json(silent=True)

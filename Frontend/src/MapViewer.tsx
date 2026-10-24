@@ -8,8 +8,11 @@ import type { FeatureCollection, Point, LineString } from "geojson";
 import {
   getFaults,
   getEventSequence,
+  simulateAftershocks,
   type EarthquakeEvent,
   type SequenceDetailsResponse,
+  type SimulatedAftershock,
+  type SimulationResponse,
 } from "./api";
 import { FALLBACK_FAULTS_GEOJSON } from "./data/faultsData";
 
@@ -254,21 +257,65 @@ export default function MapViewer({
   }, [sortedEvents, timelinePercent, activeMinMag]);
 
   // Identified aftershock events (events clustered near effective mainshock)
+  // 7-Day Aftershock Sequence Simulation State
+  const [simulationData, setSimulationData] = useState<SimulationResponse | null>(null);
+
+  // Fetch 7-day aftershock sequence simulation whenever mainshock or selected point changes
+  useEffect(() => {
+    let cancelled = false;
+    const targetLat = targetCoords ? targetCoords.lat : (effectiveMainshock ? effectiveMainshock.lat : 35.68);
+    const targetLon = targetCoords ? targetCoords.lon : (effectiveMainshock ? effectiveMainshock.lon : 139.76);
+    const mag = effectiveMainshock ? effectiveMainshock.magnitude : 5.5;
+
+    simulateAftershocks({
+      event_id: effectiveMainshock?.id,
+      lat: targetLat,
+      lon: targetLon,
+      magnitude: mag,
+      days: 7.0,
+      min_magnitude: activeMinMag,
+    })
+      .then((res) => {
+        if (!cancelled && res?.aftershocks) {
+          setSimulationData(res);
+        }
+      })
+      .catch((err) => {
+        console.warn("7-day aftershock simulation fallback:", err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveMainshock, targetCoords, activeMinMag]);
+
+  // Current simulated day in the 7-day horizon [0.0 to 7.0 days]
+  const currentSimDay = (timelinePercent / 100) * 7.0;
+
+  // Identified aftershock events (events clustered near effective mainshock from catalog)
   const identifiedAftershocks = useMemo<EarthquakeEvent[]>(() => {
     if (!effectiveMainshock) return [];
     const msTime = new Date(effectiveMainshock.time).getTime();
-    // Rupture length scaling L ~ 10^(0.5M - 1.8), search radius ~ 3.0 * L, min 35 km
     const rSearchKm = Math.max(35.0, Math.min(350.0, 3.0 * Math.max(5.0, 10 ** (0.5 * effectiveMainshock.magnitude - 1.8))));
     return displayedEvents.filter((e) => {
       if (e.id === effectiveMainshock.id) return false;
       const t = new Date(e.time).getTime();
-      if (t < msTime) return false; // Not an aftershock
+      if (t < msTime) return false;
       const d = haversineKm(effectiveMainshock.lat, effectiveMainshock.lon, e.lat, e.lon);
       return d <= rSearchKm;
     });
   }, [effectiveMainshock, displayedEvents]);
 
-  // Automated playback timer
+  // Aftershocks visible up to currentSimDay (showing up to 7 days of aftershocks when simulating)
+  const displayedSimAftershocks = useMemo<(EarthquakeEvent | SimulatedAftershock)[]>(() => {
+    if (simulationData?.aftershocks && simulationData.aftershocks.length > 0) {
+      if (timelinePercent >= 100) return simulationData.aftershocks;
+      return simulationData.aftershocks.filter((a) => a.day_offset <= currentSimDay);
+    }
+    return identifiedAftershocks;
+  }, [simulationData, currentSimDay, timelinePercent, identifiedAftershocks]);
+
+  // Automated playback timer (7-day simulation playback)
   useEffect(() => {
     let timer: any = null;
     if (isPlayingTimeline) {
@@ -278,9 +325,9 @@ export default function MapViewer({
             setIsPlayingTimeline(false);
             return 100;
           }
-          return Math.min(100, prev + 2.5);
+          return Math.min(100, prev + 1.5);
         });
-      }, 150);
+      }, 120);
     }
     return () => {
       if (timer) clearInterval(timer);
@@ -325,10 +372,10 @@ export default function MapViewer({
     };
   }, [effectiveMainshock]);
 
-  // Fetch risk forecast grid GeoJSON for active mainshock and forecast window
+  // Fetch risk forecast grid GeoJSON for active mainshock/target point and forecast window
   const loadForecastGrid = useCallback(async () => {
-    const centerLat = effectiveMainshock ? effectiveMainshock.lat : 36.0;
-    const centerLon = effectiveMainshock ? effectiveMainshock.lon : 36.0;
+    const centerLat = targetCoords ? targetCoords.lat : (effectiveMainshock ? effectiveMainshock.lat : 36.0);
+    const centerLon = targetCoords ? targetCoords.lon : (effectiveMainshock ? effectiveMainshock.lon : 139.76);
     const delta = 3.5;
 
     try {
@@ -342,7 +389,7 @@ export default function MapViewer({
     } catch (err) {
       console.warn("Forecast grid fetch fallback:", err);
     }
-  }, [effectiveMainshock, activeWindow, activeMinMag]);
+  }, [effectiveMainshock, targetCoords, activeWindow, activeMinMag]);
 
   useEffect(() => {
     loadForecastGrid();
@@ -367,8 +414,8 @@ export default function MapViewer({
     };
   };
 
-  // Convert EarthquakeEvent[] to GeoJSON FeatureCollection
-  const buildEventsGeoJSON = useCallback((evList: EarthquakeEvent[]): FeatureCollection<Point> => {
+  // Convert EarthquakeEvent[] or SimulatedAftershock[] to GeoJSON FeatureCollection
+  const buildEventsGeoJSON = useCallback((evList: (EarthquakeEvent | SimulatedAftershock)[]): FeatureCollection<Point> => {
     return {
       type: "FeatureCollection",
       features: evList.map((e) => ({
@@ -385,6 +432,9 @@ export default function MapViewer({
           time: e.time,
           depth: e.depth_km ?? 10,
           source: e.source || "usgs",
+          is_simulated: (e as any).is_simulated ?? false,
+          day_offset: (e as any).day_offset ?? 0,
+          omori_rate_at_t: (e as any).omori_rate_at_t ?? null,
         },
       })),
     };
@@ -393,7 +443,7 @@ export default function MapViewer({
   // Update or attach the Events circles layer on the map
   const updateEventsLayer = useCallback((evList: EarthquakeEvent[]) => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !map.isStyleLoaded()) return;
 
     const geojson = buildEventsGeoJSON(evList);
     const source = map.getSource("events-source") as maplibregl.GeoJSONSource | undefined;
@@ -499,7 +549,7 @@ export default function MapViewer({
   // Update or attach the Tectonic Faults layer
   const updateFaultsLayer = useCallback((faultsGjson: FeatureCollection<LineString>) => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !map.isStyleLoaded()) return;
 
     const source = map.getSource("faults-source") as maplibregl.GeoJSONSource | undefined;
     if (source) {
@@ -563,10 +613,10 @@ export default function MapViewer({
     }
   }, []);
 
-  // Update or attach the Identified Aftershocks sequence layer
-  const updateAftershocksLayer = useCallback((aftershockList: EarthquakeEvent[]) => {
+  // Update or attach the Identified Aftershocks sequence layer (observed + simulated)
+  const updateAftershocksLayer = useCallback((aftershockList: (EarthquakeEvent | SimulatedAftershock)[]) => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !map.isStyleLoaded()) return;
 
     const geojson = buildEventsGeoJSON(aftershockList);
     const source = map.getSource("aftershocks-source") as maplibregl.GeoJSONSource | undefined;
@@ -579,7 +629,7 @@ export default function MapViewer({
         data: geojson,
       });
 
-      // Neon purple aura
+      // Neon purple / coral aura
       map.addLayer({
         id: "aftershocks-glow",
         type: "circle",
@@ -593,12 +643,17 @@ export default function MapViewer({
             5.0, 15,
             7.0, 22,
           ],
-          "circle-color": "rgba(192, 132, 252, 0.35)",
+          "circle-color": [
+            "case",
+            ["get", "is_simulated"],
+            "rgba(251, 146, 60, 0.35)",
+            "rgba(192, 132, 252, 0.35)",
+          ],
           "circle-blur": 0.5,
         },
       });
 
-      // Distinct cyan/violet ring marker
+      // Distinct cyan/violet ring marker for observed, coral for simulated
       map.addLayer({
         id: "aftershocks-rings",
         type: "circle",
@@ -612,9 +667,19 @@ export default function MapViewer({
             5.0, 11,
             7.0, 17,
           ],
-          "circle-color": "rgba(192, 132, 252, 0.15)",
+          "circle-color": [
+            "case",
+            ["get", "is_simulated"],
+            "rgba(251, 146, 60, 0.20)",
+            "rgba(192, 132, 252, 0.15)",
+          ],
           "circle-stroke-width": 2.5,
-          "circle-stroke-color": "#c084fc",
+          "circle-stroke-color": [
+            "case",
+            ["get", "is_simulated"],
+            "#fb923c",
+            "#c084fc",
+          ],
           "circle-opacity": 0.9,
         },
       });
@@ -622,18 +687,25 @@ export default function MapViewer({
       map.on("click", "aftershocks-rings", (e) => {
         if (!e.features || e.features.length === 0) return;
         const feature = e.features[0];
-        const props = feature.properties;
+        const props = feature.properties || {};
         const coords = (feature.geometry as Point).coordinates;
+        const isSim = props.is_simulated;
+        const dayOff = typeof props.day_offset === "number" ? props.day_offset : 0;
+        const rateAtT = typeof props.omori_rate_at_t === "number" ? props.omori_rate_at_t : null;
 
         new maplibregl.Popup({ offset: 15 })
           .setLngLat([coords[0], coords[1]])
           .setHTML(
             `<div class="aftershock-popup">
-              <h4>💫 AFTERSHOCK: M ${props.mag}</h4>
+              <h4>${isSim ? "🔮 PROJECTED AFTERSHOCK" : "💫 OBSERVED AFTERSHOCK"}: M ${props.mag}</h4>
               <p><strong>Place:</strong> ${props.place}</p>
-              <p><strong>Depth:</strong> ${props.depth} km</p>
               <p><strong>Time:</strong> ${new Date(props.time).toLocaleString()}</p>
-              <span class="popup-tag aftershock-tag">Clustered Omori Sequence</span>
+              <p><strong>Sequence Timing:</strong> T+${dayOff.toFixed(2)} days (+${(dayOff * 24).toFixed(1)}h)</p>
+              <p><strong>Depth:</strong> ${props.depth} km</p>
+              ${rateAtT !== null ? `<p><strong>Omori Rate &lambda;(t):</strong> ${rateAtT.toFixed(3)}/day</p>` : ""}
+              <span class="popup-tag ${isSim ? "simulated-tag" : "aftershock-tag"}">
+                ${isSim ? "Omori Inhomogeneous Poisson Projection (7d Sim)" : "USGS Catalog Verified"}
+              </span>
             </div>`
           )
           .addTo(map);
@@ -651,7 +723,7 @@ export default function MapViewer({
   // Update or attach the Probabilistic Forecast Risk Heatmap & Click Cells
   const updateRiskGridLayer = useCallback((geojson: FeatureCollection) => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !map.isStyleLoaded()) return;
 
     const source = map.getSource("risk-grid-source") as maplibregl.GeoJSONSource | undefined;
     if (source) {
@@ -765,7 +837,7 @@ export default function MapViewer({
   // Update or attach the Mainshock Beacon & Rupture Zone Buffer
   const updateMainshockBeaconAndBuffer = useCallback((mainshock: EarthquakeEvent | null) => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !map.isStyleLoaded()) return;
 
     // Remove existing mainshock HTML marker
     if (mainshockMarkerRef.current) {
@@ -1030,19 +1102,23 @@ export default function MapViewer({
 
   // Sync events and layers when data changes
   useEffect(() => {
-    if (mapLoaded && mapRef.current) {
-      updateEventsLayer(displayedEvents);
-      updateAftershocksLayer(identifiedAftershocks);
-      updateFaultsLayer(faultsData);
-      updateMainshockBeaconAndBuffer(effectiveMainshock);
-      if (riskGridFeatures) {
-        updateRiskGridLayer(riskGridFeatures);
+    if (mapLoaded && mapRef.current && mapRef.current.isStyleLoaded()) {
+      try {
+        updateEventsLayer(displayedEvents);
+        updateAftershocksLayer(displayedSimAftershocks);
+        updateFaultsLayer(faultsData);
+        updateMainshockBeaconAndBuffer(effectiveMainshock);
+        if (riskGridFeatures) {
+          updateRiskGridLayer(riskGridFeatures);
+        }
+      } catch (e) {
+        console.warn("Layer sync deferred - style still loading:", e);
       }
     }
   }, [
     mapLoaded,
     displayedEvents,
-    identifiedAftershocks,
+    displayedSimAftershocks,
     faultsData,
     effectiveMainshock,
     riskGridFeatures,
@@ -1053,40 +1129,94 @@ export default function MapViewer({
     updateRiskGridLayer,
   ]);
 
-  // Toggle layer visibilities in MapLibre
+  // Update Inspection Target Reticle marker whenever targetCoords changes
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapLoaded) return;
 
-    if (map.getLayer("risk-forecast-heat")) {
-      map.setLayoutProperty("risk-forecast-heat", "visibility", showForecastHeatmap ? "visible" : "none");
+    if (!targetCoords) {
+      if (clickMarkerRef.current) {
+        clickMarkerRef.current.remove();
+        clickMarkerRef.current = null;
+      }
+      return;
     }
-    if (map.getLayer("risk-grid-cells")) {
-      map.setLayoutProperty("risk-grid-cells", "visibility", showForecastHeatmap ? "visible" : "none");
+
+    if (clickMarkerRef.current) {
+      clickMarkerRef.current.setLngLat([targetCoords.lon, targetCoords.lat]);
+    } else {
+      const el = document.createElement("div");
+      el.className = "target-crosshair-marker";
+      el.innerHTML = `
+        <svg width="34" height="34" viewBox="0 0 34 34" fill="none" class="reticle-svg">
+          <circle cx="17" cy="17" r="12" stroke="#38bdf8" stroke-width="2" stroke-dasharray="3 3"/>
+          <circle cx="17" cy="17" r="3.5" fill="#38bdf8"/>
+          <line x1="17" y1="2" x2="17" y2="8" stroke="#38bdf8" stroke-width="2"/>
+          <line x1="17" y1="26" x2="17" y2="32" stroke="#38bdf8" stroke-width="2"/>
+          <line x1="2" y1="17" x2="8" y2="17" stroke="#38bdf8" stroke-width="2"/>
+          <line x1="26" y1="17" x2="32" y2="17" stroke="#38bdf8" stroke-width="2"/>
+        </svg>
+      `;
+      clickMarkerRef.current = new maplibregl.Marker({ element: el })
+        .setLngLat([targetCoords.lon, targetCoords.lat])
+        .addTo(map);
     }
-    if (map.getLayer("faults-lines")) {
-      map.setLayoutProperty("faults-lines", "visibility", showFaultsLayer ? "visible" : "none");
+  }, [mapLoaded, targetCoords]);
+
+  // Dynamically decay forecast heatmap intensity over the 7 simulated days matching Omori's law
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded || !map.isStyleLoaded()) return;
+    try {
+      if (map.getLayer("risk-forecast-heat")) {
+        const cVal = simulationData?.omori_parameters?.c_days ?? 0.03;
+        const pVal = simulationData?.omori_parameters?.p ?? 1.05;
+        const decay = Math.max(0.18, Math.min(1.0, ((0 + cVal) / (currentSimDay + cVal)) ** pVal));
+        map.setPaintProperty("risk-forecast-heat", "heatmap-opacity", 0.85 * decay);
+      }
+    } catch {
+      // Style may be in transition
     }
-    if (map.getLayer("faults-glow")) {
-      map.setLayoutProperty("faults-glow", "visibility", showFaultsLayer ? "visible" : "none");
-    }
-    if (map.getLayer("aftershocks-rings")) {
-      map.setLayoutProperty("aftershocks-rings", "visibility", showAftershocksLayer ? "visible" : "none");
-    }
-    if (map.getLayer("aftershocks-glow")) {
-      map.setLayoutProperty("aftershocks-glow", "visibility", showAftershocksLayer ? "visible" : "none");
-    }
-    if (map.getLayer("events-circles")) {
-      map.setLayoutProperty("events-circles", "visibility", showEventsLayer ? "visible" : "none");
-    }
-    if (map.getLayer("events-glow")) {
-      map.setLayoutProperty("events-glow", "visibility", showEventsLayer ? "visible" : "none");
-    }
-    if (map.getLayer("mainshock-rupture-fill")) {
-      map.setLayoutProperty("mainshock-rupture-fill", "visibility", showMainshockLayer ? "visible" : "none");
-    }
-    if (map.getLayer("mainshock-rupture-line")) {
-      map.setLayoutProperty("mainshock-rupture-line", "visibility", showMainshockLayer ? "visible" : "none");
+  }, [currentSimDay, simulationData, mapLoaded]);
+
+  // Toggle layer visibilities in MapLibre
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded || !map.isStyleLoaded()) return;
+
+    try {
+      if (map.getLayer("risk-forecast-heat")) {
+        map.setLayoutProperty("risk-forecast-heat", "visibility", showForecastHeatmap ? "visible" : "none");
+      }
+      if (map.getLayer("risk-grid-cells")) {
+        map.setLayoutProperty("risk-grid-cells", "visibility", showForecastHeatmap ? "visible" : "none");
+      }
+      if (map.getLayer("faults-lines")) {
+        map.setLayoutProperty("faults-lines", "visibility", showFaultsLayer ? "visible" : "none");
+      }
+      if (map.getLayer("faults-glow")) {
+        map.setLayoutProperty("faults-glow", "visibility", showFaultsLayer ? "visible" : "none");
+      }
+      if (map.getLayer("aftershocks-rings")) {
+        map.setLayoutProperty("aftershocks-rings", "visibility", showAftershocksLayer ? "visible" : "none");
+      }
+      if (map.getLayer("aftershocks-glow")) {
+        map.setLayoutProperty("aftershocks-glow", "visibility", showAftershocksLayer ? "visible" : "none");
+      }
+      if (map.getLayer("events-circles")) {
+        map.setLayoutProperty("events-circles", "visibility", showEventsLayer ? "visible" : "none");
+      }
+      if (map.getLayer("events-glow")) {
+        map.setLayoutProperty("events-glow", "visibility", showEventsLayer ? "visible" : "none");
+      }
+      if (map.getLayer("mainshock-rupture-fill")) {
+        map.setLayoutProperty("mainshock-rupture-fill", "visibility", showMainshockLayer ? "visible" : "none");
+      }
+      if (map.getLayer("mainshock-rupture-line")) {
+        map.setLayoutProperty("mainshock-rupture-line", "visibility", showMainshockLayer ? "visible" : "none");
+      }
+    } catch {
+      // Style may be transitioning
     }
   }, [
     showForecastHeatmap,
@@ -1146,7 +1276,11 @@ export default function MapViewer({
   const switchTheme = (theme: "light" | "dark" | "grayscale") => {
     setActiveTheme(theme);
     if (mapRef.current) {
+      setMapLoaded(false);
       mapRef.current.setStyle(getStyleForTheme(theme));
+      mapRef.current.once("style.load", () => {
+        setMapLoaded(true);
+      });
     }
   };
 
@@ -1511,7 +1645,11 @@ export default function MapViewer({
               </div>
               <div className="legend-symbology-item">
                 <span className="symbol-icon text-purple">💫</span>
-                <span>Identified Aftershock Ring</span>
+                <span>Observed Aftershock Ring (USGS)</span>
+              </div>
+              <div className="legend-symbology-item">
+                <span className="symbol-icon text-orange">🔮</span>
+                <span>Projected Aftershock (7d Simulation)</span>
               </div>
               <div className="legend-symbology-item">
                 <span className="symbol-line-fault" />
@@ -1530,12 +1668,12 @@ export default function MapViewer({
                   <span className="metric-lbl">Mainshock</span>
                 </div>
                 <div className="metric-item">
-                  <span className="metric-val font-mono">{identifiedAftershocks.length}</span>
-                  <span className="metric-lbl">Aftershocks</span>
+                  <span className="metric-val font-mono">{displayedSimAftershocks.length}</span>
+                  <span className="metric-lbl">Aftershocks (7d)</span>
                 </div>
                 <div className="metric-item">
                   <span className="metric-val font-mono">
-                    {sequenceDetails?.omori_fit?.p ? `p=${sequenceDetails.omori_fit.p.toFixed(2)}` : "Omori"}
+                    {sequenceDetails?.omori_fit?.p ? `p=${sequenceDetails.omori_fit.p.toFixed(2)}` : "p=1.05"}
                   </span>
                   <span className="metric-lbl">Decay Rate</span>
                 </div>
@@ -1554,7 +1692,7 @@ export default function MapViewer({
         )}
       </aside>
 
-      {/* Unified Mission-Control Timeline & Telemetry Console */}
+      {/* Unified Mission-Control Timeline & Telemetry Console: 7-Day Aftershock Simulation */}
       <footer className="timeline-scrubber-bar mission-control-console">
         <div className="timeline-dock-header">
           {/* Playback Controls */}
@@ -1568,9 +1706,20 @@ export default function MapViewer({
                 }
                 setIsPlayingTimeline((prev) => !prev);
               }}
-              title={isPlayingTimeline ? "Pause sequence playback" : "Play earthquake sequence playback"}
+              title={isPlayingTimeline ? "Pause sequence simulation" : "Play 7-day aftershock sequence simulation"}
             >
-              {isPlayingTimeline ? "⏸ Pause" : "▶ Play Sequence"}
+              {isPlayingTimeline ? "⏸ Pause Simulation" : "▶ Simulate 7 Days"}
+            </button>
+            <button
+              type="button"
+              className="btn-timeline-reset"
+              onClick={() => {
+                setIsPlayingTimeline(false);
+                setTimelinePercent(0);
+              }}
+              title="Reset simulation to T-0 (Day 0)"
+            >
+              ↺ T-0 (Day 0)
             </button>
             <button
               type="button"
@@ -1579,55 +1728,64 @@ export default function MapViewer({
                 setIsPlayingTimeline(false);
                 setTimelinePercent(100);
               }}
-              title="Reset scrubber to latest"
+              title="Jump to end of 7-day simulation horizon"
             >
-              ↺ Latest
+              ⏩ Day 7 (+168h)
             </button>
           </div>
 
-          {/* Center: Shock Counter Telemetry */}
-          <div className="timeline-dock-center">
+          {/* Right: Shock Counter Telemetry & Instantaneous Omori Rate */}
+          <div className="timeline-dock-right">
             <span className="timeline-shock-badge font-mono">
-              ⚡ <strong className="text-cyan">{displayedEvents.length}</strong> shocks (
-              <span className="text-purple">{identifiedAftershocks.length} aftershocks</span>)
-              <span className="timeline-pct-tag">[{timelinePercent.toFixed(0)}%]</span>
-            </span>
-          </div>
-
-          {/* Right: Viewport Coordinates & Hint */}
-          <div className="timeline-dock-coords font-mono">
-            <span className="dock-coord-val">{viewportInfo.lat}°N, {viewportInfo.lng}°E</span>
-            <span className="dock-zoom-badge">z{viewportInfo.zoom}</span>
-            <span className="dock-tip-pill" title="Click anywhere on the map to evaluate site-specific seismic hazard">
-              <span className="click-hint-full">💡 Click map for risk</span>
-              <span className="click-hint-short">💡 Risk inspect</span>
+              📅 <strong className="text-cyan">Day {currentSimDay.toFixed(1)}</strong> of 7.0d (
+              <span className="text-dim">+{(currentSimDay * 24).toFixed(0)}h</span>)
+              &nbsp;|&nbsp;
+              ⚡ <strong className="text-orange">{displayedSimAftershocks.length}</strong> aftershocks
+              &nbsp;|&nbsp;
+              <span className="text-purple">
+                λ(t): {(
+                  simulationData?.omori_parameters
+                    ? simulationData.omori_parameters.k /
+                      ((currentSimDay + simulationData.omori_parameters.c_days) ** simulationData.omori_parameters.p)
+                    : 0.45
+                ).toFixed(2)}/day
+              </span>
             </span>
           </div>
         </div>
 
-        {/* Timeline Slider Track */}
+        {/* Timeline Slider Track: 0 to 7 Days */}
         <div className="timeline-slider-container">
           <div className="timeline-slider-track-row">
-            <span className="timeline-edge-label font-mono">T-0 (Start)</span>
+            <span className="timeline-edge-label font-mono">T-0 (Day 0.0)</span>
             <div className="timeline-range-wrapper">
               <input
                 type="range"
                 min="0"
                 max="100"
-                step="1"
+                step="0.5"
                 value={timelinePercent}
                 onChange={(e) => {
                   setIsPlayingTimeline(false);
                   setTimelinePercent(parseFloat(e.target.value));
                 }}
                 className="styled-range timeline-range-slider"
-                title={`Timeline sequence position: ${timelinePercent.toFixed(0)}%`}
+                title={`Simulation timeline: Day ${currentSimDay.toFixed(1)} of 7.0 days (+${(currentSimDay * 24).toFixed(0)} hours)`}
               />
             </div>
-            <span className="timeline-edge-label font-mono">Latest (100%)</span>
+            <span className="timeline-edge-label font-mono">+7.0 Days (168h)</span>
           </div>
         </div>
       </footer>
+
+      {/* Bottom-left Viewport Coordinates HUD */}
+      <div className="map-viewport-hud font-mono">
+        <span className="dock-coord-val">{viewportInfo.lat}°N, {viewportInfo.lng}°E</span>
+        <span className="dock-zoom-badge">z{viewportInfo.zoom}</span>
+        <span className="dock-tip-pill" title="Click anywhere on the map to evaluate site-specific seismic hazard">
+          💡 Click map to predict point risk
+        </span>
+      </div>
 
       {/* Loading Overlay */}
       {!mapLoaded && !loadError && (

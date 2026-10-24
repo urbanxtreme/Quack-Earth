@@ -410,3 +410,54 @@ def calibrate_model():
         }, 200
     except Exception as exc:
         return error(f"Calibration failed: {exc}", 500)
+
+
+@risk_bp.get("/risk/simulate-aftershocks")
+def simulate_point_aftershocks():
+    """Simulate aftershocks for an arbitrary point or candidate mainshock."""
+    try:
+        lat = float(request.args.get("lat", 35.68))
+        lon = float(request.args.get("lon", 139.76))
+        mag = float(request.args.get("magnitude", 5.0))
+        days = float(request.args.get("days", 7.0))
+        min_mag = float(request.args.get("min_magnitude", 3.0))
+        mainshock_id = request.args.get("mainshock_id")
+
+        repository = current_app.extensions["event_repository"]
+        main_event = repository.get_event(mainshock_id) if mainshock_id else None
+        all_events = repository.list_events(limit=5000)
+
+        from datetime import datetime, timezone
+        from quack_risk.sequence import identify_sequence, simulate_aftershock_sequence
+
+        if main_event:
+            seq = identify_sequence(all_events, main_event)
+            omori_fit = seq.omori_fit
+            geom = seq.geometry
+            obs_aftershocks = seq.aftershocks
+            main_payload = main_event
+        else:
+            main_payload = {
+                "id": f"point_{lat:.2f}_{lon:.2f}",
+                "lat": lat,
+                "lon": lon,
+                "mag": mag,
+                "depth_km": 15.0,
+                "time": datetime.now(timezone.utc).isoformat(),
+            }
+            omori_fit = None
+            geom = None
+            obs_aftershocks = []
+
+        sim_res = simulate_aftershock_sequence(
+            mainshock=main_payload,
+            omori_fit=omori_fit,
+            geometry=geom,
+            duration_days=days,
+            min_magnitude=min_mag,
+            observed_aftershocks=obs_aftershocks,
+        )
+        return sim_res, 200
+    except Exception as exc:
+        return error(f"Point simulation failed: {exc}", 500)
+

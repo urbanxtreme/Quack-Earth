@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import numpy as np
@@ -659,3 +659,165 @@ def calculate_sequence_probabilistic_grid(
         "limitations": limitations,
         "grid": grid_cells,
     }
+
+
+def simulate_aftershock_sequence(
+    mainshock: Any,
+    omori_fit: OmoriFit | None = None,
+    geometry: ClusterGeometry | None = None,
+    duration_days: float = 7.0,
+    min_magnitude: float = 3.0,
+    observed_aftershocks: list[dict[str, Any]] | None = None,
+    random_seed: int = 42,
+) -> dict[str, Any]:
+    """Generate a realistic 7-day probabilistic aftershock sequence based on the Modified Omori Law
+    and Wells & Coppersmith spatial rupture dimensions.
+
+    Combines real observed aftershocks with model-projected Inhomogeneous Poisson events over [0, duration_days].
+    """
+    rng = np.random.RandomState(random_seed)
+
+    main_lat = float(mainshock.latitude if hasattr(mainshock, "latitude") else mainshock["lat"])
+    main_lon = float(mainshock.longitude if hasattr(mainshock, "longitude") else mainshock["lon"])
+    main_mag = float(mainshock.magnitude if hasattr(mainshock, "magnitude") and mainshock.magnitude is not None else (mainshock.get("mag", 5.0) or 5.0))
+    main_id = getattr(mainshock, "event_id", None) or mainshock.get("id") or "mainshock"
+
+    main_time_raw = mainshock.origin_time if hasattr(mainshock, "origin_time") else mainshock.get("time")
+    if isinstance(main_time_raw, str):
+        main_time = pd.to_datetime(main_time_raw, utc=True).to_pydatetime()
+    elif isinstance(main_time_raw, datetime):
+        main_time = main_time_raw if main_time_raw.tzinfo else main_time_raw.replace(tzinfo=timezone.utc)
+    else:
+        main_time = datetime.now(timezone.utc)
+
+    main_depth = float(getattr(mainshock, "depth_km", None) or mainshock.get("depth_km") or 10.0)
+
+    # Omori parameters
+    if omori_fit and omori_fit.is_fitted:
+        k_val = float(omori_fit.k)
+        c_val = float(omori_fit.c_days)
+        p_val = float(omori_fit.p)
+    else:
+        k_val = float(0.04 * (10.0 ** (0.75 * max(0.0, main_mag - min_magnitude))))
+        c_val = 0.03
+        p_val = 1.05
+
+    # Expected count over the 7 days
+    e_n = integrate_omori_expected_count(k_val, c_val, p_val, 0.0, duration_days)
+    n_proj = int(round(rng.poisson(max(3.0, e_n))))
+    n_proj = max(2, min(60, n_proj))
+
+    # Wells & Coppersmith dimensions
+    l_rup = rupture_length_km(main_mag)
+    w_rup = max(3.0, 10.0 ** (0.33 * main_mag - 0.9))
+    strike_deg = geometry.strike_deg if geometry and geometry.is_elongated else 35.0
+    strike_rad = math.radians(strike_deg)
+
+    # Combine observed aftershocks
+    results = []
+    observed_times_sec = set()
+    if observed_aftershocks:
+        for aft in observed_aftershocks:
+            aft_lat = float(aft.get("latitude") if "latitude" in aft else aft.get("lat", main_lat))
+            aft_lon = float(aft.get("longitude") if "longitude" in aft else aft.get("lon", main_lon))
+            aft_mag = float(aft.get("magnitude") if "magnitude" in aft else aft.get("mag", min_magnitude))
+            aft_time_raw = aft.get("origin_time") or aft.get("time")
+            if isinstance(aft_time_raw, str):
+                t_dt = pd.to_datetime(aft_time_raw, utc=True).to_pydatetime()
+            elif isinstance(aft_time_raw, datetime):
+                t_dt = aft_time_raw if aft_time_raw.tzinfo else aft_time_raw.replace(tzinfo=timezone.utc)
+            else:
+                t_dt = main_time
+            dt_days = max(0.0, (t_dt - main_time).total_seconds() / 86400.0)
+            if dt_days <= duration_days:
+                observed_times_sec.add(int((t_dt - main_time).total_seconds()))
+                results.append({
+                    "id": aft.get("event_id") or aft.get("id") or f"obs_{len(results)}",
+                    "lat": aft_lat,
+                    "lon": aft_lon,
+                    "magnitude": round(aft_mag, 1),
+                    "depth_km": round(float(aft.get("depth_km") or 10.0), 1),
+                    "day_offset": round(dt_days, 4),
+                    "hour_offset": round(dt_days * 24.0, 2),
+                    "time": t_dt.isoformat().replace("+00:00", "Z"),
+                    "place": aft.get("place") or f"Aftershock M{aft_mag:.1f}",
+                    "is_simulated": False,
+                    "source": aft.get("source") or "usgs",
+                    "omori_rate_at_t": round(k_val / ((dt_days + c_val) ** p_val), 4),
+                })
+
+    # Sample projected aftershocks
+    # Omori CDF inversion: F(t) = integral_0^t / integral_0^T
+    denom = (duration_days + c_val) ** (1.0 - p_val) - c_val ** (1.0 - p_val) if abs(p_val - 1.0) >= 1e-4 else math.log((duration_days + c_val) / c_val)
+
+    u_samples = rng.uniform(0.001, 0.999, size=n_proj)
+    u_samples.sort()
+
+    for idx, u in enumerate(u_samples):
+        if abs(p_val - 1.0) < 1e-4:
+            t_day = c_val * (math.exp(u * denom) - 1.0)
+        else:
+            val = u * denom + c_val ** (1.0 - p_val)
+            t_day = (val ** (1.0 / (1.0 - p_val))) - c_val
+        t_day = max(0.005, min(duration_days, float(t_day)))
+
+        # Magnitude via Gutenberg-Richter b=1.0, max = main_mag - 0.7
+        u_m = rng.uniform(0.0, 0.96)
+        m_sample = min_magnitude - math.log(1.0 - u_m) / (1.0 * math.log(10.0))
+        m_sample = min(main_mag - 0.7, max(min_magnitude, m_sample))
+
+        # Spatial coordinate along rupture
+        s_along = rng.normal(0.0, l_rup * 0.45)
+        d_across = rng.normal(0.0, w_rup * 0.4)
+        dn = s_along * math.cos(strike_rad) - d_across * math.sin(strike_rad)
+        de = s_along * math.sin(strike_rad) + d_across * math.cos(strike_rad)
+
+        aft_lat = main_lat + dn / KM_PER_DEG
+        aft_lon = main_lon + de / (KM_PER_DEG * math.cos(math.radians(main_lat)))
+        aft_depth = max(2.0, min(50.0, main_depth + rng.normal(0.0, 4.0)))
+
+        t_sim_dt = main_time + timedelta(seconds=t_day * 86400.0)
+        rate_t = k_val / ((t_day + c_val) ** p_val)
+
+        results.append({
+            "id": f"proj_{main_id}_{idx+1:02d}",
+            "lat": round(aft_lat, 4),
+            "lon": round(aft_lon, 4),
+            "magnitude": round(float(m_sample), 1),
+            "depth_km": round(float(aft_depth), 1),
+            "day_offset": round(t_day, 4),
+            "hour_offset": round(t_day * 24.0, 2),
+            "time": t_sim_dt.isoformat().replace("+00:00", "Z"),
+            "place": f"Forecast Aftershock M{m_sample:.1f} (Omori T+{t_day:.1f}d)",
+            "is_simulated": True,
+            "source": "omori_poisson_model",
+            "omori_rate_at_t": round(rate_t, 4),
+        })
+
+    # Sort all aftershocks chronologically
+    results.sort(key=lambda x: x["day_offset"])
+
+    return {
+        "mainshock": {
+            "id": main_id,
+            "lat": main_lat,
+            "lon": main_lon,
+            "magnitude": main_mag,
+            "time": main_time.isoformat().replace("+00:00", "Z"),
+            "depth_km": main_depth,
+            "rupture_length_km": round(l_rup, 2),
+            "strike_deg": round(strike_deg, 1),
+        },
+        "omori_parameters": {
+            "k": round(k_val, 5),
+            "c_days": round(c_val, 4),
+            "p": round(p_val, 3),
+            "expected_count_7d": round(e_n, 2),
+        },
+        "duration_days": duration_days,
+        "total_aftershocks": len(results),
+        "observed_count": len([r for r in results if not r["is_simulated"]]),
+        "projected_count": len([r for r in results if r["is_simulated"]]),
+        "aftershocks": results,
+    }
+

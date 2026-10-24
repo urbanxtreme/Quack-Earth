@@ -450,3 +450,73 @@ export async function getRiskVerdict(params: {
   return await res.json();
 }
 
+export interface SimulatedAftershock {
+  id: string;
+  lat: number;
+  lon: number;
+  magnitude: number;
+  depth_km: number;
+  day_offset: number;
+  hour_offset: number;
+  time: string;
+  place: string;
+  is_simulated: boolean;
+  source: string;
+  omori_rate_at_t: number;
+}
+
+export interface SimulationResponse {
+  mainshock: {
+    id: string;
+    lat: number;
+    lon: number;
+    magnitude: number;
+    time: string;
+    depth_km: number;
+    rupture_length_km: number;
+    strike_deg: number;
+  };
+  omori_parameters: {
+    k: number;
+    c_days: number;
+    p: number;
+    expected_count_7d: number;
+  };
+  duration_days: number;
+  total_aftershocks: number;
+  observed_count: number;
+  projected_count: number;
+  aftershocks: SimulatedAftershock[];
+}
+
+/**
+ * Run 7-Day Probabilistic Aftershock Simulation using Modified Omori Law
+ */
+export async function simulateAftershocks(params: {
+  event_id?: string;
+  lat?: number;
+  lon?: number;
+  magnitude?: number;
+  days?: number;
+  min_magnitude?: number;
+}): Promise<SimulationResponse> {
+  const query = new URLSearchParams();
+  if (params.days !== undefined) query.set("days", params.days.toString());
+  if (params.min_magnitude !== undefined) query.set("min_magnitude", params.min_magnitude.toString());
+  if (params.lat !== undefined) query.set("lat", params.lat.toString());
+  if (params.lon !== undefined) query.set("lon", params.lon.toString());
+  if (params.magnitude !== undefined) query.set("magnitude", params.magnitude.toString());
+  if (params.event_id) query.set("mainshock_id", params.event_id);
+
+  const endpoint = params.event_id
+    ? `${API_BASE}/events/${encodeURIComponent(params.event_id)}/simulate-aftershocks?${query.toString()}`
+    : `${API_BASE}/risk/simulate-aftershocks?${query.toString()}`;
+
+  const res = await fetch(endpoint, { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) {
+    throw new Error(`Simulation failed with HTTP ${res.status}`);
+  }
+  return await res.json();
+}
+
+

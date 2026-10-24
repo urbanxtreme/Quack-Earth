@@ -271,3 +271,45 @@ def test_empty_catalog_edge_case(app, client):
     grid_data = res_grid.get_json()
     assert grid_data["type"] == "FeatureCollection"
     assert len(grid_data["features"]) > 0
+
+
+def test_simulate_aftershock_sequence_endpoints(app, client):
+    """Test 7-day aftershock sequence simulation endpoints."""
+    with app.app_context():
+        repo = app.extensions["event_repository"]
+        now = datetime.now(timezone.utc)
+        ms = Event(
+            event_id="sim-test-ms",
+            origin_time=now - timedelta(hours=12),
+            latitude=35.68,
+            longitude=139.76,
+            magnitude=6.8,
+            depth_km=15.0,
+            magnitude_type="mw",
+            review_status="reviewed",
+            source="usgs",
+            fetched_at=now,
+        )
+        repo.upsert_events([ms])
+
+    # 1. Test event-based simulation
+    res = client.get("/events/sim-test-ms/simulate-aftershocks?days=7.0&min_magnitude=3.0")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["duration_days"] == 7.0
+    assert "omori_parameters" in data
+    assert "aftershocks" in data
+    assert len(data["aftershocks"]) >= 2
+    # Verify all aftershocks have day offsets between 0 and 7
+    for aft in data["aftershocks"]:
+        assert 0.0 <= aft["day_offset"] <= 7.0
+        assert aft["magnitude"] >= 3.0
+        assert "lat" in aft and "lon" in aft
+
+    # 2. Test point-based simulation
+    res_point = client.get("/risk/simulate-aftershocks?lat=35.68&lon=139.76&magnitude=5.5&days=7.0")
+    assert res_point.status_code == 200
+    pt_data = res_point.get_json()
+    assert pt_data["duration_days"] == 7.0
+    assert len(pt_data["aftershocks"]) >= 2
+
