@@ -39,12 +39,23 @@ class EventRepository:
                 );
                 """
             )
-            # Ensure note and place columns exist for existing databases
+            # Ensure note, place, and scientific uncertainty columns exist for existing databases
             cols = [row[1] for row in connection.execute("PRAGMA table_info(events)").fetchall()]
-            if "note" not in cols:
-                connection.execute("ALTER TABLE events ADD COLUMN note TEXT")
-            if "place" not in cols:
-                connection.execute("ALTER TABLE events ADD COLUMN place TEXT")
+            extra_cols = [
+                ("note", "TEXT"),
+                ("place", "TEXT"),
+                ("horizontal_error_km", "REAL"),
+                ("depth_error_km", "REAL"),
+                ("mag_error", "REAL"),
+                ("azimuthal_gap", "REAL"),
+                ("dmin", "REAL"),
+                ("rms", "REAL"),
+                ("nst", "INTEGER"),
+                ("event_type", "TEXT"),
+            ]
+            for col_name, col_type in extra_cols:
+                if col_name not in cols:
+                    connection.execute(f"ALTER TABLE events ADD COLUMN {col_name} {col_type}")
 
         self._seed_if_empty()
 
@@ -88,6 +99,11 @@ class EventRepository:
                 except Exception:
                     pass
         self.export_model_cache()
+
+    def clear_cache(self):
+        with closing(self._connect()) as connection, connection:
+            connection.execute("DELETE FROM events")
+            connection.execute("DELETE FROM cache_metadata")
 
     def export_model_cache(self):
         cache_dir = Path(__file__).resolve().parents[3] / "model" / "data" / "cache"
@@ -146,19 +162,35 @@ class EventRepository:
     def upsert_events(self, events: Iterable[Event]):
         with closing(self._connect()) as connection, connection:
             connection.executemany(
-                """INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """INSERT INTO events (
+                    event_id, origin_time, latitude, longitude, depth_km, magnitude,
+                    magnitude_type, review_status, source, fetched_at, note, place,
+                    horizontal_error_km, depth_error_km, mag_error, azimuthal_gap,
+                    dmin, rms, nst, event_type
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(event_id) DO UPDATE SET
                 origin_time=excluded.origin_time, latitude=excluded.latitude,
                 longitude=excluded.longitude, depth_km=excluded.depth_km,
                 magnitude=excluded.magnitude, magnitude_type=excluded.magnitude_type,
                 review_status=excluded.review_status, source=excluded.source,
-                fetched_at=excluded.fetched_at, note=excluded.note, place=excluded.place""",
+                fetched_at=excluded.fetched_at, note=excluded.note, place=excluded.place,
+                horizontal_error_km=excluded.horizontal_error_km, depth_error_km=excluded.depth_error_km,
+                mag_error=excluded.mag_error, azimuthal_gap=excluded.azimuthal_gap,
+                dmin=excluded.dmin, rms=excluded.rms, nst=excluded.nst, event_type=excluded.event_type""",
                 [
                     (
                         e.event_id, e.origin_time.isoformat(), e.latitude, e.longitude,
                         e.depth_km, e.magnitude, e.magnitude_type, e.review_status,
                         e.source, e.fetched_at.isoformat(), getattr(e, "note", None),
                         getattr(e, "place", None),
+                        getattr(e, "horizontal_error_km", None),
+                        getattr(e, "depth_error_km", None),
+                        getattr(e, "mag_error", None),
+                        getattr(e, "azimuthal_gap", None),
+                        getattr(e, "dmin", None),
+                        getattr(e, "rms", None),
+                        getattr(e, "nst", None),
+                        getattr(e, "event_type", "earthquake"),
                     )
                     for e in events
                 ],
@@ -179,9 +211,12 @@ class EventRepository:
             return f"local_{max_num + 1:03d}"
 
     def list_events(self, start: datetime | None = None, end: datetime | None = None,
-                    min_magnitude: float | None = None,
+                    min_magnitude: float | None = None, max_magnitude: float | None = None,
+                    min_lat: float | None = None, max_lat: float | None = None,
+                    min_lon: float | None = None, max_lon: float | None = None,
                     latitude: float | None = None, longitude: float | None = None,
-                    radius_km: float | None = None, limit: int = 5000) -> list[Event]:
+                    radius_km: float | None = None, source: str | None = None,
+                    limit: int = 5000, offset: int = 0) -> list[Event]:
         clauses, values = [], []
         if start:
             if start.tzinfo is None:
@@ -196,11 +231,35 @@ class EventRepository:
         if min_magnitude is not None:
             clauses.append("magnitude >= ?")
             values.append(min_magnitude)
+        if max_magnitude is not None:
+            clauses.append("magnitude <= ?")
+            values.append(max_magnitude)
+        if min_lat is not None:
+            clauses.append("latitude >= ?")
+            values.append(min_lat)
+        if max_lat is not None:
+            clauses.append("latitude <= ?")
+            values.append(max_lat)
+        if min_lon is not None:
+            clauses.append("longitude >= ?")
+            values.append(min_lon)
+        if max_lon is not None:
+            clauses.append("longitude <= ?")
+            values.append(max_lon)
+        if source:
+            if source.lower() == "usgs":
+                clauses.append("(source LIKE '%usgs%' AND source != 'user_report' AND event_id NOT LIKE 'local_%')")
+            elif source.lower() in ("local", "user_report"):
+                clauses.append("(source = 'user_report' OR event_id LIKE 'local_%')")
+            else:
+                clauses.append("source = ?")
+                values.append(source)
+
         query = "SELECT * FROM events"
         if clauses:
             query += " WHERE " + " AND ".join(clauses)
-        query += " ORDER BY origin_time DESC LIMIT ?"
-        values.append(limit)
+        query += " ORDER BY origin_time DESC LIMIT ? OFFSET ?"
+        values.extend([limit, offset])
         with closing(self._connect()) as connection:
             rows = connection.execute(query, values).fetchall()
         events = [self._from_row(row) for row in rows]
@@ -240,8 +299,19 @@ class EventRepository:
         col_keys = row.keys() if hasattr(row, "keys") else []
         note = row["note"] if "note" in col_keys else None
         place = row["place"] if "place" in col_keys else None
+        h_err = row["horizontal_error_km"] if "horizontal_error_km" in col_keys else None
+        d_err = row["depth_error_km"] if "depth_error_km" in col_keys else None
+        m_err = row["mag_error"] if "mag_error" in col_keys else None
+        gap = row["azimuthal_gap"] if "azimuthal_gap" in col_keys else None
+        dmin = row["dmin"] if "dmin" in col_keys else None
+        rms = row["rms"] if "rms" in col_keys else None
+        nst = row["nst"] if "nst" in col_keys else None
+        etype = row["event_type"] if "event_type" in col_keys else "earthquake"
+
         return Event(
             row["event_id"], _timestamp(row["origin_time"]), row["latitude"], row["longitude"],
             row["depth_km"], row["magnitude"], row["magnitude_type"], row["review_status"],
             row["source"], _timestamp(row["fetched_at"]), note, place,
+            horizontal_error_km=h_err, depth_error_km=d_err, mag_error=m_err,
+            azimuthal_gap=gap, dmin=dmin, rms=rms, nst=nst, event_type=etype,
         )

@@ -135,7 +135,7 @@ def haversine_vector(lat1: float, lon1: float, lat2_arr: np.ndarray, lon2_arr: n
     r_lon2 = np.radians(lon2_arr)
     dlat = r_lat2 - r_lat1
     dlon = r_lon2 - r_lon1
-    a = np.sin(dlat / 2.0) ** 2 + math.cos(r_lat1) * math.cos(r_lat2) * np.sin(dlon / 2.0) ** 2
+    a = np.sin(dlat / 2.0) ** 2 + math.cos(r_lat1) * np.cos(r_lat2) * np.sin(dlon / 2.0) ** 2
     return 6371.0088 * 2.0 * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
 
 
@@ -152,7 +152,7 @@ def classify_risk_level(relative_risk: float) -> str:
 class RiskService:
     def __init__(self, repository):
         self.repository = repository
-        self.model_name = "quack-risk-etas-v1"
+        self.model_name = "omori-style-v1"
         self.baseline_window_days = 30.0
         self.reload_params()
 
@@ -178,8 +178,9 @@ class RiskService:
         radius_km: float = 50.0,
         time_window: str = "24h",
         min_magnitude: float = 4.0,
+        mainshock_id: str | None = None,
     ) -> dict:
-        window_days = 1.0 if time_window == "24h" else 7.0
+        window_days = 1.0 if time_window == "24h" else (7.0 if time_window == "7d" else 3.0)
         now = datetime.now(timezone.utc)
         all_events = self.repository.list_events(limit=10000)
 
@@ -201,6 +202,7 @@ class RiskService:
                 "min_magnitude": min_magnitude,
                 "center": {"lat": lat, "lon": lon},
                 "baseline_rate": 0.0,
+                "model": self.model_name,
                 "zones": [
                     {
                         "lat": lat,
@@ -208,10 +210,14 @@ class RiskService:
                         "risk_score": 0.0,
                         "relative_to_baseline": 1.0,
                         "expected_events": 0.0,
+                        "expected_rate": 0.0,
+                        "expected_rate_unit": "events/day",
                         "risk_level": "low",
+                        "probability": 0.0,
                         "probability_24h": 0.0,
                         "probability_7d": 0.0,
                         "public_zone": "usual",
+                        "data_quality": "insufficient_data",
                     }
                 ],
                 "verdict": verdict_bundle["verdict"],
@@ -239,7 +245,6 @@ class RiskService:
         ]
 
         if not baseline_events:
-            # Fall back to checking 30 days prior to ref_time
             baseline_events = [
                 e for e in all_events
                 if (ref_time - timedelta(days=self.baseline_window_days)) <= e.origin_time <= ref_time
@@ -249,6 +254,11 @@ class RiskService:
 
         baseline_rate = len(baseline_events) / self.baseline_window_days
         effective_baseline = baseline_rate if baseline_rate > 0 else 0.01
+
+        # Check for specific trigger / sequence
+        selected_mainshock = None
+        if mainshock_id:
+            selected_mainshock = self.repository.get_event(mainshock_id)
 
         # Triggered rate: recent events within 14 days
         recent_start = ref_time - timedelta(days=self.recent_window_days)
@@ -270,7 +280,7 @@ class RiskService:
                 triggered_rate += self.k * mag_boost * time_decay * spatial_decay
 
         total_rate = baseline_rate + triggered_rate
-        expected_events = round(total_rate * window_days, 2)
+        expected_events = round(total_rate * window_days, 4)
         relative_to_baseline = round(total_rate / effective_baseline, 1) if total_rate > 0 else 1.0
         risk_level = classify_risk_level(relative_to_baseline)
 
@@ -282,6 +292,7 @@ class RiskService:
             score = 1.0 - (1.0 / (1.0 + (rel / 3.5) ** 1.2))
             risk_score = round(min(1.0, max(0.0, score)), 2)
 
+        p_window = min(1.0, max(0.0, 1.0 - math.exp(-total_rate * window_days)))
         p_24h = min(1.0, max(0.0, 1.0 - math.exp(-total_rate * 1.0)))
         p_7d = min(1.0, max(0.0, 1.0 - math.exp(-total_rate * 7.0)))
 
@@ -303,17 +314,23 @@ class RiskService:
             "min_magnitude": min_magnitude,
             "center": {"lat": lat, "lon": lon},
             "baseline_rate": round(baseline_rate, 3),
+            "model": self.model_name,
+            "mainshock_id": mainshock_id,
             "zones": [
                 {
                     "lat": lat,
                     "lon": lon,
                     "risk_score": risk_score,
                     "relative_to_baseline": relative_to_baseline,
-                    "expected_events": expected_events,
+                    "expected_events": round(expected_events, 2),
+                    "expected_rate": round(float(total_rate), 5),
+                    "expected_rate_unit": "events/day",
                     "risk_level": risk_level,
+                    "probability": round(p_window, 4),
                     "probability_24h": round(p_24h, 4),
                     "probability_7d": round(p_7d, 4),
                     "public_zone": verdict_bundle["public_zone"],
+                    "data_quality": "calibrated_sequence" if selected_mainshock else "regional_baseline",
                 }
             ],
             "verdict": verdict_bundle["verdict"],
@@ -332,6 +349,7 @@ class RiskService:
         resolution: float = 0.1,
         time_window: str = "24h",
         min_magnitude: float = 4.0,
+        mainshock_id: str | None = None,
     ) -> dict:
         if resolution <= 0:
             raise ValueError("resolution must be positive")
@@ -353,96 +371,65 @@ class RiskService:
             if (now - max_event_time).days > 30:
                 ref_time = max_event_time + timedelta(hours=1)
 
-        # Attempt to run via model/quack_risk if available and valid bounds
-        if (max_lon - min_lon) >= resolution and (max_lat - min_lat) >= resolution:
+        window_days = 1.0 if time_window == "24h" else (7.0 if time_window == "7d" else 3.0)
+        bounds = (float(min_lon), float(min_lat), float(max_lon), float(max_lat))
+
+        # Check if a specific mainshock is requested or can be identified
+        selected_mainshock = None
+        if mainshock_id:
+            selected_mainshock = self.repository.get_event(mainshock_id)
+        elif all_events:
+            # Check for candidate mainshock within or near the bounding box
+            candidates = [
+                e for e in all_events
+                if (min_lat - 1.0) <= e.latitude <= (max_lat + 1.0)
+                and (min_lon - 1.0) <= e.longitude <= (max_lon + 1.0)
+                and e.magnitude is not None and e.source != "user_report"
+            ]
+            if candidates:
+                candidates.sort(key=lambda x: (x.magnitude or 0, x.origin_time), reverse=True)
+                if candidates[0].magnitude and candidates[0].magnitude >= 4.5:
+                    selected_mainshock = candidates[0]
+
+        # Use quack_risk.sequence model when mainshock is available
+        if selected_mainshock:
             try:
-                model_dir = str(Path(__file__).resolve().parents[3] / "model")
-                if model_dir not in sys.path:
-                    sys.path.insert(0, model_dir)
-                import pandas as pd
-                from quack_risk.engine import score_grid
+                from quack_risk.sequence import (
+                    calculate_sequence_probabilistic_grid,
+                    identify_sequence,
+                )
+                seq_res = identify_sequence(
+                    all_events,
+                    selected_mainshock,
+                    default_params=self.params,
+                )
+                seq_grid_res = calculate_sequence_probabilistic_grid(
+                    seq_res,
+                    bounds=bounds,
+                    resolution_deg=resolution,
+                    forecast_window_days=window_days,
+                    min_magnitude=min_magnitude,
+                    baseline_events=all_events,
+                    as_of=ref_time,
+                    params=self.params,
+                )
 
-                cat_rows = []
-                for e in all_events:
-                    if e.source != "user_report" and not e.event_id.startswith("local_"):
-                        cat_rows.append({
-                            "id": e.event_id,
-                            "time": e.origin_time.isoformat(),
-                            "latitude": e.latitude,
-                            "longitude": e.longitude,
-                            "depth_km": e.depth_km if e.depth_km is not None else 10.0,
-                            "magnitude": e.magnitude if e.magnitude is not None else 4.0,
-                            "mag_type": e.magnitude_type or "ml",
-                            "source": "usgs",
-                        })
+                df_for_verdict = pd.DataFrame(seq_grid_res["grid"])
+                verdict_bundle = generate_verdict_and_guidance(
+                    df_for_verdict,
+                    as_of_iso=ref_time.isoformat().replace("+00:00", "Z"),
+                    min_magnitude=min_magnitude,
+                )
 
-                if cat_rows:
-                    cat_df = pd.DataFrame(cat_rows)
-                    sig_rows = []
-                    for e in all_events:
-                        if e.source == "user_report" or e.event_id.startswith("local_"):
-                            sig_rows.append({
-                                "id": e.event_id,
-                                "time": e.origin_time.isoformat(),
-                                "latitude": e.latitude,
-                                "longitude": e.longitude,
-                                "signal_type": "report",
-                                "confidence": 1.0,
-                                "equivalent_magnitude": e.magnitude,
-                            })
-                    sig_df = pd.DataFrame(sig_rows) if sig_rows else None
-
-                    bounds = (float(min_lon), float(min_lat), float(max_lon), float(max_lat))
-                    df_scored = score_grid(
-                        cat_df,
-                        as_of=ref_time,
-                        bounds=bounds,
-                        resolution_deg=resolution,
-                        magnitude_threshold=min_magnitude,
-                        local_signals=sig_df,
-                        params=self.params,
-                    )
-
-                    try:
-                        from quack_risk.io import write_risk_grid
-                        output_grid_path = Path(_MODEL_DIR) / "outputs" / "grids" / "risk_grid.csv"
-                        write_risk_grid(df_scored, output_grid_path)
-                    except Exception:
-                        pass
-
-                    verdict_bundle = generate_verdict_and_guidance(
-                        df_scored,
-                        as_of_iso=ref_time.isoformat().replace("+00:00", "Z"),
-                        min_magnitude=min_magnitude,
-                    )
-
-                    grid_cells = []
-                    for _, row in df_scored.iterrows():
-                        prob = float(row["probability_24h"] if time_window == "24h" else row["probability_7d"])
-                        rel = float(row["relative_risk"])
-                        grid_cells.append({
-                            "lat": round(float(row["lat"]), 4),
-                            "lon": round(float(row["lon"]), 4),
-                            "risk_score": round(min(1.0, max(0.0, prob)), 2),
-                            "risk_level": str(row["risk_level"]),
-                            "relative_risk": round(rel, 1),
-                            "probability_24h": round(float(row["probability_24h"]), 4),
-                            "probability_7d": round(float(row["probability_7d"]), 4),
-                        })
-
-                    return {
-                        "time_window": time_window,
-                        "grid": grid_cells,
-                        "verdict": verdict_bundle["verdict"],
-                        "guidance": verdict_bundle["guidance"],
-                        "public_zone": verdict_bundle["public_zone"],
-                        "excavation_action": verdict_bundle["excavation_action"],
-                    }
+                seq_grid_res["verdict"] = verdict_bundle["verdict"]
+                seq_grid_res["guidance"] = verdict_bundle["guidance"]
+                seq_grid_res["public_zone"] = verdict_bundle["public_zone"]
+                seq_grid_res["excavation_action"] = verdict_bundle["excavation_action"]
+                return seq_grid_res
             except Exception:
-                # Seamless fallback to robust vectorized numpy engine
                 pass
 
-        # Fallback to robust vectorized numpy calculation
+        # Robust fall-back calculation
         buffer_deg = 1.5
         area_events = [
             e for e in all_events
@@ -490,7 +477,7 @@ class RiskService:
                     b_count = np.sum(d_base <= cell_radius_km)
                     baseline_rate = b_count / self.baseline_window_days
                 else:
-                    baseline_rate = 0.0
+                    baseline_rate = 0.005
 
                 effective_baseline = baseline_rate if baseline_rate > 0 else 0.01
 
@@ -522,6 +509,8 @@ class RiskService:
                     score = 1.0 - (1.0 / (1.0 + (relative / 3.5) ** 1.2))
                     risk_score = round(float(np.clip(score, 0.0, 1.0)), 2)
 
+                expected_cnt = total_rate * window_days
+                p_win = min(1.0, max(0.0, 1.0 - math.exp(-expected_cnt)))
                 p_24h = min(1.0, max(0.0, 1.0 - math.exp(-total_rate * 1.0)))
                 p_7d = min(1.0, max(0.0, 1.0 - math.exp(-total_rate * 7.0)))
 
@@ -531,9 +520,13 @@ class RiskService:
                     "risk_score": risk_score,
                     "risk_level": risk_level,
                     "relative_risk": round(float(relative), 1),
-                    "total_rate": round(float(total_rate), 5),
+                    "expected_rate": round(float(total_rate), 5),
+                    "expected_rate_unit": "events/day",
+                    "expected_events": round(float(expected_cnt), 4),
+                    "probability": round(float(p_win), 4),
                     "probability_24h": round(float(p_24h), 4),
                     "probability_7d": round(float(p_7d), 4),
+                    "data_quality": "regional_baseline",
                 })
 
         df_grid = (
@@ -549,6 +542,18 @@ class RiskService:
 
         return {
             "time_window": time_window,
+            "min_magnitude": min_magnitude,
+            "mainshock_id": getattr(selected_mainshock, "event_id", None) if selected_mainshock else None,
+            "model": self.model_name,
+            "data_source": "USGS ComCat & Edge Cache",
+            "catalog_freshness": ref_time.isoformat().replace("+00:00", "Z"),
+            "generated_at": now.isoformat().replace("+00:00", "Z"),
+            "total_cells": len(grid_cells),
+            "limitations": [
+                "Statistical aftershock forecast conditional on recent catalog activity.",
+                "Inhomogeneous Poisson assumption may underestimate secondary triggering.",
+                "Does not constitute an official prediction of exact earthquake timing.",
+            ],
             "grid": grid_cells,
             "verdict": verdict_bundle["verdict"],
             "guidance": verdict_bundle["guidance"],

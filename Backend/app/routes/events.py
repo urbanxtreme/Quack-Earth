@@ -81,31 +81,85 @@ def events():
         min_mag_param = request.args.get("min_magnitude")
         min_magnitude = float(min_mag_param) if min_mag_param is not None else 2.5
 
+        max_mag_param = request.args.get("max_magnitude")
+        max_magnitude = float(max_mag_param) if max_mag_param is not None else None
+
         limit_param = request.args.get("limit")
         limit = int(float(limit_param)) if limit_param is not None else 200
         if limit <= 0:
             return error("limit must be a positive integer", 422)
+
+        offset_param = request.args.get("offset")
+        offset = int(float(offset_param)) if offset_param is not None else 0
+        if offset < 0:
+            return error("offset must be non-negative", 422)
+
+        min_lat = float(request.args["min_lat"]) if "min_lat" in request.args else None
+        max_lat = float(request.args["max_lat"]) if "max_lat" in request.args else None
+        min_lon = float(request.args["min_lon"]) if "min_lon" in request.args else None
+        max_lon = float(request.args["max_lon"]) if "max_lon" in request.args else None
+
+        if any(v is not None for v in (min_lat, max_lat, min_lon, max_lon)):
+            if not all(v is not None for v in (min_lat, max_lat, min_lon, max_lon)):
+                return error("If specifying bounds, all of min_lat, max_lat, min_lon, max_lon are required", 400)
+            if not (-90.0 <= min_lat <= 90.0 and -90.0 <= max_lat <= 90.0 and
+                    -180.0 <= min_lon <= 180.0 and -180.0 <= max_lon <= 180.0):
+                return error("Coordinates out of range", 422)
+            if min_lat >= max_lat or min_lon >= max_lon:
+                return error("min boundaries must be less than max boundaries", 400)
+
+        source = request.args.get("source")
 
         repository = current_app.extensions["event_repository"]
         now = datetime.now(timezone.utc)
         start = now - timedelta(hours=hours)
         end = now + timedelta(hours=24)  # account for slight future timestamp in local reports
 
-        # Also support explicit start/end query parameters if provided
         if request.args.get("end"):
             end = parse_iso(request.args["end"], "end")
         if request.args.get("start"):
             start = parse_iso(request.args["start"], "start")
 
-        records = repository.list_events(start=start, end=end, min_magnitude=min_magnitude, limit=limit)
+        records = repository.list_events(
+            start=start,
+            end=end,
+            min_magnitude=min_magnitude,
+            max_magnitude=max_magnitude,
+            min_lat=min_lat,
+            max_lat=max_lat,
+            min_lon=min_lon,
+            max_lon=max_lon,
+            source=source,
+            limit=limit,
+            offset=offset,
+        )
 
         # If no events exist in the requested window, query live from USGS if available
         if not records and not (request.args.get("start") or request.args.get("end")):
             catalog_service = current_app.extensions.get("catalog_service")
             if catalog_service:
                 try:
-                    catalog_service.refresh(min_magnitude=min_magnitude, days_back=max(1, int(hours / 24) + 1))
-                    records = repository.list_events(start=start, end=end, min_magnitude=min_magnitude, limit=limit)
+                    catalog_service.refresh(
+                        min_magnitude=min_magnitude,
+                        days_back=max(1, int(hours / 24) + 1),
+                        min_lat=min_lat,
+                        max_lat=max_lat,
+                        min_lon=min_lon,
+                        max_lon=max_lon,
+                    )
+                    records = repository.list_events(
+                        start=start,
+                        end=end,
+                        min_magnitude=min_magnitude,
+                        max_magnitude=max_magnitude,
+                        min_lat=min_lat,
+                        max_lat=max_lat,
+                        min_lon=min_lon,
+                        max_lon=max_lon,
+                        source=source,
+                        limit=limit,
+                        offset=offset,
+                    )
                 except Exception:
                     pass
 
@@ -121,13 +175,7 @@ def events():
                         "type": "Point",
                         "coordinates": [ev["lon"], ev["lat"]] if ev.get("depth_km") is None else [ev["lon"], ev["lat"], ev["depth_km"]],
                     },
-                    "properties": {
-                        "mag": ev["magnitude"],
-                        "time": ev["time"],
-                        "source": ev["source"],
-                        "note": ev.get("note"),
-                        "place": ev.get("place"),
-                    },
+                    "properties": ev,
                 }
                 for ev in event_list
             ]
@@ -152,6 +200,52 @@ def get_single_event(event_id: str):
     if not event:
         return error("Event not found", 404, code="event_not_found")
     return event.to_dict(), 200
+
+
+@events_bp.get("/events/<event_id>/sequence")
+def get_event_sequence(event_id: str):
+    """Retrieve identified aftershock sequence and spatiotemporal cluster telemetry for an event."""
+    repository = current_app.extensions["event_repository"]
+    main_event = repository.get_event(event_id)
+    if not main_event:
+        return error("Event not found", 404, code="event_not_found")
+
+    all_events = repository.list_events(limit=10000)
+    try:
+        from quack_risk.sequence import identify_sequence
+        seq = identify_sequence(all_events, main_event)
+
+        return {
+            "mainshock": seq.mainshock,
+            "search_radius_km": seq.search_radius_km,
+            "search_window_days": seq.search_window_days,
+            "foreshock_count": len(seq.foreshocks),
+            "aftershock_count": len(seq.aftershocks),
+            "confidence": seq.confidence,
+            "geometry": {
+                "strike_deg": seq.geometry.strike_deg,
+                "major_axis_km": seq.geometry.major_axis_km,
+                "minor_axis_km": seq.geometry.minor_axis_km,
+                "aspect_ratio": seq.geometry.aspect_ratio,
+                "is_elongated": seq.geometry.is_elongated,
+                "strike_uncertainty_deg": seq.geometry.strike_uncertainty_deg,
+                "notes": seq.geometry.notes,
+            },
+            "omori_fit": {
+                "k": seq.omori_fit.k,
+                "c_days": seq.omori_fit.c_days,
+                "p": seq.omori_fit.p,
+                "is_fitted": seq.omori_fit.is_fitted,
+                "log_likelihood": seq.omori_fit.log_likelihood,
+                "method": seq.omori_fit.method,
+                "parameter_uncertainty": seq.omori_fit.parameter_uncertainty,
+            },
+            "foreshocks": seq.foreshocks[:50],
+            "aftershocks": seq.aftershocks[:200],
+            "data_quality_notes": seq.data_quality_notes,
+        }, 200
+    except Exception as exc:
+        return error(f"Sequence analysis failed: {exc}", 500)
 
 
 @events_bp.post("/local-event")

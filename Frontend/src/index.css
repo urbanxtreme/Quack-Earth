@@ -3059,3 +3059,382 @@ select.glass-input option {
     max-height: 85vh;
   }
 }
+
+/* ==========================================================================
+   Scientific Aftershock Risk Forecasting & Map Visualization System
+   ========================================================================== */
+
+/* Mainshock Pulsing Beacon Marker */
+.mainshock-beacon-marker {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  margin-left: -22px;
+  margin-top: -22px;
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.mainshock-radar-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 2px solid rgba(239, 68, 68, 0.9);
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.3) 0%, rgba(239, 68, 68, 0.05) 70%, transparent 100%);
+  animation: mainshockRadar 2s cubic-bezier(0.1, 0.7, 0.1, 1) infinite;
+}
+
+.mainshock-radar-ring-outer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 1px dashed rgba(249, 115, 22, 0.7);
+  animation: mainshockRadar 2s cubic-bezier(0.1, 0.7, 0.1, 1) infinite;
+  animation-delay: 0.6s;
+  opacity: 0.6;
+}
+
+.mainshock-core-star {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 26px;
+  height: 26px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #ffffff;
+  font-weight: 900;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.9), 0 0 32px rgba(239, 68, 68, 0.4);
+}
+
+@keyframes mainshockRadar {
+  0% {
+    transform: translate(-50%, -50%) scale(0.35);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.8);
+    opacity: 0;
+  }
+}
+
+/* Popups for Faults, Cells, and Aftershocks */
+.fault-popup h4 {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fbbf24;
+  margin-bottom: 4px;
+}
+
+.fault-popup p,
+.risk-cell-popup p,
+.mainshock-popup p,
+.aftershock-popup p {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin: 2px 0;
+}
+
+.popup-tag.fault-tag {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.popup-tag.mainshock-tag {
+  background: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+}
+
+.popup-tag.aftershock-tag {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+
+/* Forecast Window Toggle Row */
+.forecast-window-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 2px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-glass);
+}
+
+.forecast-window-btn {
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.forecast-window-btn.active {
+  background: rgba(56, 189, 248, 0.25);
+  color: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+}
+
+/* Magnitude Slider Widget in Top Toolbar */
+.mag-toolbar-slider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-glass);
+}
+
+.mag-toolbar-label {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mag-toolbar-val {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--hazard-elevated);
+  font-family: var(--font-mono);
+  min-width: 32px;
+}
+
+.mag-toolbar-input {
+  width: 70px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  height: 4px;
+}
+
+/* Mainshock Select in Toolbar */
+.mainshock-selector-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mainshock-dropdown {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  border-radius: var(--radius-xs);
+  padding: 4px 8px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  max-width: 170px;
+}
+
+.btn-clear-mainshock {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  padding: 3px 7px;
+  border-radius: var(--radius-xs);
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-clear-mainshock:hover {
+  background: rgba(239, 68, 68, 0.35);
+  color: #fff;
+}
+
+/* Scientific Legend Overlay */
+.scientific-legend-card {
+  position: absolute;
+  top: 72px;
+  left: 16px;
+  z-index: 20;
+  width: 310px;
+  max-width: calc(100vw - 32px);
+  background: rgba(8, 14, 28, 0.94);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid var(--border-glass-bright);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
+  font-size: 0.74rem;
+  color: var(--text-main);
+  transition: all 0.2s ease;
+}
+
+.scientific-legend-card.minimized {
+  width: auto;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.legend-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.legend-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.legend-formula-badge {
+  font-size: 0.65rem;
+  color: var(--accent-cyan);
+  font-family: var(--font-mono);
+  background: rgba(56, 189, 248, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.legend-section-heading {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 10px 0 4px 0;
+}
+
+.legend-symbology-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.legend-symbology-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.71rem;
+}
+
+.symbol-icon {
+  font-size: 0.9rem;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.symbol-line-fault {
+  width: 18px;
+  height: 3px;
+  background: #f59e0b;
+  border-radius: 2px;
+  box-shadow: 0 0 6px #f59e0b;
+  flex-shrink: 0;
+}
+
+.legend-disclaimer {
+  font-size: 0.64rem;
+  color: var(--text-dim);
+  line-height: 1.35;
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 6px;
+}
+
+/* Sequence Breakdown Card in RiskPanel */
+.sequence-analysis-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sequence-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sequence-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.sequence-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.seq-stat-box {
+  background: rgba(0, 0, 0, 0.35);
+  padding: 6px 4px;
+  border-radius: var(--radius-xs);
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.seq-stat-val {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fff;
+  display: block;
+}
+
+.seq-stat-lbl {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  display: block;
+}
+
+.omori-formula-box {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  border-left: 3px solid var(--accent-cyan);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #e2e8f0;
+}
+
+.omori-param-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}

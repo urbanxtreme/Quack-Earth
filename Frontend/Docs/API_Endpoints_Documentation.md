@@ -13,15 +13,17 @@ No authentication required for the hackathon prototype.
 
 ## Endpoints Overview
 
-| Method | Endpoint              | Description                                      |
-|--------|-----------------------|--------------------------------------------------|
-| GET    | `/status`             | System health and cache status                   |
-| GET    | `/risk`               | Calculate short-term risk scores for an area     |
-| GET    | `/events`             | Retrieve recent earthquakes from cache           |
-| POST   | `/local-event`        | Add a local event/report and update risk         |
-| POST   | `/refresh-catalog`    | Download latest catalog from USGS (online only)  |
-| GET    | `/risk/grid`          | Get risk values on a regular grid (for heatmap)  |
-| POST   | `/forecasts`          | Compute aftershock hazard triggered by an event  |
+| Method | Endpoint                    | Description                                      |
+|--------|-----------------------------|--------------------------------------------------|
+| GET    | `/status`                   | System health and cache status                   |
+| GET    | `/risk`                     | Calculate short-term risk scores for an area     |
+| GET    | `/events`                   | Retrieve recent earthquakes from cache           |
+| GET    | `/events/<id>/sequence`     | Sequence breakdown, Omori fit, cluster geometry  |
+| GET    | `/faults`                   | Verified active tectonic fault traces GeoJSON    |
+| POST   | `/local-event`              | Add a local event/report and update risk         |
+| POST   | `/refresh-catalog`          | Download latest catalog from USGS (online only)  |
+| GET    | `/risk/grid`                | Get risk values on a regular grid (for heatmap)  |
+| POST   | `/forecasts`                | Compute aftershock hazard triggered by an event  |
 
 ---
 

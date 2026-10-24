@@ -11,13 +11,26 @@ from quack_risk.schema import (
     SignalSchemaError,
 )
 
+from quack_risk.sequence import (
+    SequenceIdentificationResult,
+    calculate_sequence_probabilistic_grid,
+    fit_omori_mle,
+    identify_sequence,
+    integrate_omori_expected_count,
+)
+
 __all__ = [
     "CATALOG_COLUMNS",
     "GRID_COLUMNS",
     "SIGNAL_COLUMNS",
     "CatalogSchemaError",
     "RiskParams",
+    "SequenceIdentificationResult",
     "SignalSchemaError",
+    "calculate_sequence_probabilistic_grid",
+    "fit_omori_mle",
+    "identify_sequence",
+    "integrate_omori_expected_count",
     "load_catalog",
     "load_signals",
     "score_grid",

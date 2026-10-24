@@ -33,12 +33,13 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
   const [status, setStatus] = useState<SystemStatusType | null>(null);
   const [events, setEvents] = useState<EarthquakeEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<EarthquakeEvent | null>(null);
+  const [selectedMainshock, setSelectedMainshock] = useState<EarthquakeEvent | null>(null);
   const [riskData, setRiskData] = useState<RiskResponse | null>(null);
 
   // Filter & coordinate states
-  const [timeWindowHours, setTimeWindowHours] = useState<number>(72);
+  const [timeWindowHours, setTimeWindowHours] = useState<number>(24);
   const [minMagnitude, setMinMagnitude] = useState<number>(3.0);
-  const [riskTimeWindow, setRiskTimeWindow] = useState<"24h" | "7d">("24h");
+  const [riskTimeWindow, setRiskTimeWindow] = useState<"24h" | "72h" | "7d">("24h");
   const [inspectedCoords, setInspectedCoords] = useState<{ lat: number; lon: number } | null>({
     lat: 35.6762,
     lon: 139.6503,
@@ -77,8 +78,9 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
   }, [timeWindowHours, minMagnitude]);
 
   // Recalculate risk for currently inspected coordinates
-  const loadRisk = useCallback(async (coords?: { lat: number; lon: number }) => {
+  const loadRisk = useCallback(async (coords?: { lat: number; lon: number }, mainshock?: EarthquakeEvent | null) => {
     const target = coords || inspectedCoords || { lat: 35.6762, lon: 139.6503 };
+    const ms = mainshock !== undefined ? mainshock : selectedMainshock;
     setIsRiskLoading(true);
     try {
       const res = await calculateRisk({
@@ -86,6 +88,7 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
         lon: target.lon,
         time_window: riskTimeWindow,
         min_magnitude: 4.0,
+        mainshock_id: ms?.id,
       });
       setRiskData(res);
     } catch (err) {
@@ -93,7 +96,7 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
     } finally {
       setIsRiskLoading(false);
     }
-  }, [inspectedCoords, riskTimeWindow]);
+  }, [inspectedCoords, riskTimeWindow, selectedMainshock]);
 
   // Handle Scenario switching
   const handleSelectScenario = useCallback((scenarioId: string) => {
@@ -102,9 +105,10 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
     if (!scenario) return;
 
     if (scenario.id === "live_usgs") {
+      setSelectedMainshock(null);
       loadEvents();
       loadStatus();
-      loadRisk({ lat: 35.6762, lon: 139.6503 });
+      loadRisk({ lat: 35.6762, lon: 139.6503 }, null);
       setInspectedCoords({ lat: 35.6762, lon: 139.6503 });
       setActiveLocationLabel("Tokyo, Japan (USGS Global)");
       return;
@@ -114,9 +118,10 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
       setEvents(scenario.events);
       const mainEvent = scenario.events[0];
       setSelectedEvent(mainEvent);
+      setSelectedMainshock(mainEvent);
       setInspectedCoords(scenario.center);
       setActiveLocationLabel(scenario.name);
-      loadRisk(scenario.center);
+      loadRisk(scenario.center, mainEvent);
     }
   }, [loadEvents, loadStatus, loadRisk]);
 
@@ -326,6 +331,17 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
             targetCoords={inspectedCoords}
             activeScenarioId={activeScenarioId}
             onSelectScenario={handleSelectScenario}
+            selectedMainshock={selectedMainshock}
+            onSelectMainshock={setSelectedMainshock}
+            forecastWindow={riskTimeWindow}
+            onChangeForecastWindow={(w) => {
+              setRiskTimeWindow(w);
+              const hrs = w === "24h" ? 24 : w === "72h" ? 72 : 168;
+              setTimeWindowHours(hrs);
+            }}
+            minMagnitude={minMagnitude}
+            onChangeMinMagnitude={setMinMagnitude}
+            isOffline={status?.mode === "offline"}
             onSyncSuccess={() => {
               loadEvents();
               loadStatus();
@@ -370,9 +386,14 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
                   activeLocationName={activeLocationLabel}
                   selectedCoordinates={inspectedCoords}
                   timeWindow={riskTimeWindow}
-                  setTimeWindow={setRiskTimeWindow}
+                  setTimeWindow={(tw) => {
+                    setRiskTimeWindow(tw);
+                    const hrs = tw === "24h" ? 24 : tw === "72h" ? 72 : 168;
+                    setTimeWindowHours(hrs);
+                  }}
                   onRecalculate={() => loadRisk()}
                   onOpenSitRep={() => setIsSitRepOpen(true)}
+                  selectedMainshock={selectedMainshock}
                 />
               )}
 

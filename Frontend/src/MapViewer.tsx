@@ -4,8 +4,14 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import * as pmtiles from "pmtiles";
 import { layers, namedFlavor } from "@protomaps/basemaps";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-import type { FeatureCollection, Point } from "geojson";
-import type { EarthquakeEvent } from "./api";
+import type { FeatureCollection, Point, LineString } from "geojson";
+import {
+  getFaults,
+  getEventSequence,
+  type EarthquakeEvent,
+  type SequenceDetailsResponse,
+} from "./api";
+import { FALLBACK_FAULTS_GEOJSON } from "./data/faultsData";
 
 // Configure MapLibre Web Worker for Vite
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
@@ -21,18 +27,19 @@ export interface MapViewerProps {
   onSyncSuccess?: () => void;
   activeScenarioId?: string;
   onSelectScenario?: (scenarioId: string) => void;
+  selectedMainshock?: EarthquakeEvent | null;
+  onSelectMainshock?: (event: EarthquakeEvent | null) => void;
+  forecastWindow?: "24h" | "72h" | "7d";
+  onChangeForecastWindow?: (window: "24h" | "72h" | "7d") => void;
+  minMagnitude?: number;
+  onChangeMinMagnitude?: (mag: number) => void;
+  isOffline?: boolean;
 }
 
 interface GeocodedLocation {
   name: string;
   lat: number;
   lon: number;
-}
-
-interface HeatmapStats {
-  locationName: string;
-  centerLat: number;
-  centerLon: number;
 }
 
 // Proxied through Vite dev server to guarantee 100% CORS & HTTP Range support on any local port
@@ -48,7 +55,6 @@ async function geocodePlace(query: string): Promise<GeocodedLocation | null> {
   const trimmed = query.trim();
   if (!trimmed) return null;
 
-  // 1. Try local Vite proxy first
   try {
     const res = await fetch(`/nominatim-proxy/search?q=${encodeURIComponent(trimmed)}&format=json&limit=1`);
     if (res.ok) {
@@ -67,7 +73,6 @@ async function geocodePlace(query: string): Promise<GeocodedLocation | null> {
     // Fallback
   }
 
-  // 2. Direct Nominatim fallback
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(trimmed)}&format=json&limit=1`);
     if (res.ok) {
@@ -86,7 +91,6 @@ async function geocodePlace(query: string): Promise<GeocodedLocation | null> {
     // Fallback
   }
 
-  // 3. Predefined coordinates dictionary fallback
   const normalized = trimmed.toLowerCase();
   const presets: Record<string, GeocodedLocation> = {
     kochi: { name: "Kochi, Kerala, India", lat: 9.9312, lon: 76.2673 },
@@ -97,24 +101,12 @@ async function geocodePlace(query: string): Promise<GeocodedLocation | null> {
     california: { name: "California, USA", lat: 36.7783, lon: -119.4179 },
     "los angeles": { name: "Los Angeles, California, USA", lat: 34.0522, lon: -118.2437 },
     chile: { name: "Chile", lat: -35.6751, lon: -71.543 },
-    santiago: { name: "Santiago, Chile", lat: -33.4489, lon: -70.6693 },
-    nepal: { name: "Nepal", lat: 28.3949, lon: 84.124 },
-    kathmandu: { name: "Kathmandu, Nepal", lat: 27.7172, lon: 85.324 },
-    turkey: { name: "Turkey", lat: 38.9637, lon: 35.2433 },
+    turkey: { name: "Kahramanmaraş, Turkey", lat: 37.175, lon: 37.025 },
     istanbul: { name: "Istanbul, Turkey", lat: 41.0082, lon: 28.9784 },
+    nepal: { name: "Nepal", lat: 28.3949, lon: 84.124 },
     indonesia: { name: "Indonesia", lat: -0.7893, lon: 113.9213 },
-    jakarta: { name: "Jakarta, Indonesia", lat: -6.2088, lon: 106.8456 },
     iceland: { name: "Iceland", lat: 64.9631, lon: -19.0208 },
-    reykjavik: { name: "Reykjavik, Iceland", lat: 64.1466, lon: -21.9426 },
     "new delhi": { name: "New Delhi, Delhi, India", lat: 28.6139, lon: 77.209 },
-    india: { name: "India", lat: 20.5937, lon: 78.9629 },
-    london: { name: "London, England, UK", lat: 51.5074, lon: -0.1278 },
-    "new york": { name: "New York, USA", lat: 40.7128, lon: -74.006 },
-    hawaii: { name: "Hawaii, USA", lat: 19.8968, lon: -155.5828 },
-    mexico: { name: "Mexico", lat: 23.6345, lon: -102.5528 },
-    "mexico city": { name: "Mexico City, Mexico", lat: 19.4326, lon: -99.1332 },
-    taiwan: { name: "Taiwan", lat: 23.6978, lon: 120.9605 },
-    alaska: { name: "Alaska, USA", lat: 64.2008, lon: -149.4937 },
   };
 
   for (const [key, val] of Object.entries(presets)) {
@@ -124,6 +116,50 @@ async function geocodePlace(query: string): Promise<GeocodedLocation | null> {
   }
 
   return null;
+}
+
+// Great circle distance in km
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const rLat1 = (lat1 * Math.PI) / 180;
+  const rLon1 = (lon1 * Math.PI) / 180;
+  const rLat2 = (lat2 * Math.PI) / 180;
+  const rLon2 = (lon2 * Math.PI) / 180;
+  const dlat = rLat2 - rLat1;
+  const dlon = rLon2 - rLon1;
+  const a =
+    Math.sin(dlat / 2) ** 2 +
+    Math.cos(rLat1) * Math.cos(rLat2) * Math.sin(dlon / 2) ** 2;
+  return 6371.0088 * 2 * Math.asin(Math.sqrt(Math.min(1.0, Math.max(0.0, a))));
+}
+
+// Helper to generate polygon circle coordinates for rupture zone buffer
+function buildCircleGeoJSON(centerLon: number, centerLat: number, radiusKm: number, points: number = 48): FeatureCollection {
+  const coords: [number, number][] = [];
+  const kmPerDegLat = 111.0;
+  const kmPerDegLon = 111.0 * Math.cos((centerLat * Math.PI) / 180.0);
+  for (let i = 0; i <= points; i++) {
+    const angle = (i * 2 * Math.PI) / points;
+    const dx = radiusKm * Math.cos(angle);
+    const dy = radiusKm * Math.sin(angle);
+    const lon = centerLon + dx / kmPerDegLon;
+    const lat = centerLat + dy / kmPerDegLat;
+    coords.push([lon, lat]);
+  }
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        geometry: {
+          type: "Polygon",
+          coordinates: [coords],
+        },
+        properties: {
+          radiusKm,
+        },
+      },
+    ],
+  };
 }
 
 export default function MapViewer({
@@ -137,12 +173,19 @@ export default function MapViewer({
   onSyncSuccess,
   activeScenarioId = "live_usgs",
   onSelectScenario,
+  selectedMainshock,
+  onSelectMainshock,
+  forecastWindow = "24h",
+  onChangeForecastWindow,
+  minMagnitude = 3.0,
+  onChangeMinMagnitude,
+  isOffline = false,
 }: MapViewerProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const centerMarkerRef = useRef<maplibregl.Marker | null>(null);
   const clickMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const currentHeatmapDataRef = useRef<FeatureCollection | null>(null);
+  const mainshockMarkerRef = useRef<maplibregl.Marker | null>(null);
 
   const [mapLoaded, setMapLoaded] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -154,28 +197,76 @@ export default function MapViewer({
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [activeLocation, setActiveLocation] = useState<GeocodedLocation | null>(null);
-  const [heatmapStats, setHeatmapStats] = useState<HeatmapStats | null>(null);
+
+  // Layer visibility toggles
+  const [showEventsLayer, setShowEventsLayer] = useState<boolean>(true);
+  const [showMainshockLayer, setShowMainshockLayer] = useState<boolean>(true);
+  const [showAftershocksLayer, setShowAftershocksLayer] = useState<boolean>(true);
+  const [showFaultsLayer, setShowFaultsLayer] = useState<boolean>(true);
+  const [showForecastHeatmap, setShowForecastHeatmap] = useState<boolean>(true);
+  const [isLegendExpanded, setIsLegendExpanded] = useState<boolean>(true);
+
+  // Local state for forecast window and min magnitude if not controlled externally
+  const [internalForecastWindow, setInternalForecastWindow] = useState<"24h" | "72h" | "7d">("24h");
+  const [internalMinMagnitude, setInternalMinMagnitude] = useState<number>(3.0);
+  const activeWindow = forecastWindow || internalForecastWindow;
+  const activeMinMag = minMagnitude !== undefined ? minMagnitude : internalMinMagnitude;
+
+  // Identified sequence aftershocks state
+  const [sequenceDetails, setSequenceDetails] = useState<SequenceDetailsResponse | null>(null);
+  const [riskGridFeatures, setRiskGridFeatures] = useState<FeatureCollection | null>(null);
+  const [faultsData, setFaultsData] = useState<FeatureCollection<LineString>>(FALLBACK_FAULTS_GEOJSON);
 
   // 72-Hour / Sequence Timeline Scrubbing state
   const [timelinePercent, setTimelinePercent] = useState<number>(100);
   const [isPlayingTimeline, setIsPlayingTimeline] = useState<boolean>(false);
+
+  const [viewportInfo, setViewportInfo] = useState<{ lng: string; lat: string; zoom: string }>({
+    lng: "0.00",
+    lat: "20.00",
+    zoom: "2.5",
+  });
+
+  // Effective mainshock: prop if provided, else auto-detect largest event >= 5.0
+  const effectiveMainshock = useMemo<EarthquakeEvent | null>(() => {
+    if (selectedMainshock) return selectedMainshock;
+    if (events.length === 0) return null;
+    const sorted = [...events].sort((a, b) => b.magnitude - a.magnitude);
+    return sorted[0].magnitude >= 5.0 ? sorted[0] : null;
+  }, [selectedMainshock, events]);
 
   // Chronologically sorted events
   const sortedEvents = useMemo(() => {
     return [...events].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
   }, [events]);
 
-  // Events filtered by scrubber position
+  // Events filtered by scrubber position and minimum magnitude slider
   const displayedEvents = useMemo(() => {
-    if (timelinePercent >= 100 || sortedEvents.length <= 1) {
-      return sortedEvents;
+    let filtered = sortedEvents.filter((e) => e.magnitude >= activeMinMag);
+    if (timelinePercent >= 100 || filtered.length <= 1) {
+      return filtered;
     }
-    const tMin = new Date(sortedEvents[0].time).getTime();
-    const tMax = new Date(sortedEvents[sortedEvents.length - 1].time).getTime();
-    if (tMax <= tMin) return sortedEvents;
+    const tMin = new Date(filtered[0].time).getTime();
+    const tMax = new Date(filtered[filtered.length - 1].time).getTime();
+    if (tMax <= tMin) return filtered;
     const cutoff = tMin + (tMax - tMin) * (timelinePercent / 100);
-    return sortedEvents.filter((e) => new Date(e.time).getTime() <= cutoff);
-  }, [sortedEvents, timelinePercent]);
+    return filtered.filter((e) => new Date(e.time).getTime() <= cutoff);
+  }, [sortedEvents, timelinePercent, activeMinMag]);
+
+  // Identified aftershock events (events clustered near effective mainshock)
+  const identifiedAftershocks = useMemo<EarthquakeEvent[]>(() => {
+    if (!effectiveMainshock) return [];
+    const msTime = new Date(effectiveMainshock.time).getTime();
+    // Rupture length scaling L ~ 10^(0.5M - 1.8), search radius ~ 3.0 * L, min 35 km
+    const rSearchKm = Math.max(35.0, Math.min(350.0, 3.0 * Math.max(5.0, 10 ** (0.5 * effectiveMainshock.magnitude - 1.8))));
+    return displayedEvents.filter((e) => {
+      if (e.id === effectiveMainshock.id) return false;
+      const t = new Date(e.time).getTime();
+      if (t < msTime) return false; // Not an aftershock
+      const d = haversineKm(effectiveMainshock.lat, effectiveMainshock.lon, e.lat, e.lon);
+      return d <= rSearchKm;
+    });
+  }, [effectiveMainshock, displayedEvents]);
 
   // Automated playback timer
   useEffect(() => {
@@ -195,15 +286,67 @@ export default function MapViewer({
       if (timer) clearInterval(timer);
     };
   }, [isPlayingTimeline]);
-  const [showEventsLayer, setShowEventsLayer] = useState<boolean>(true);
-  const [showHeatmapLayer, setShowHeatmapLayer] = useState<boolean>(true);
-  const [isLegendExpanded, setIsLegendExpanded] = useState<boolean>(true);
 
-  const [viewportInfo, setViewportInfo] = useState<{ lng: string; lat: string; zoom: string }>({
-    lng: "0.00",
-    lat: "20.00",
-    zoom: "2.5",
-  });
+  // Fetch verified active tectonic faults
+  useEffect(() => {
+    let cancelled = false;
+    getFaults()
+      .then((data) => {
+        if (!cancelled && data?.features?.length > 0) {
+          setFaultsData(data);
+        }
+      })
+      .catch((err) => {
+        console.warn("Faults API fetch fallback to built-in cache:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetch sequence details when mainshock changes
+  useEffect(() => {
+    if (!effectiveMainshock) {
+      setSequenceDetails(null);
+      return;
+    }
+    let cancelled = false;
+    getEventSequence(effectiveMainshock.id)
+      .then((data) => {
+        if (!cancelled) {
+          setSequenceDetails(data);
+        }
+      })
+      .catch((err) => {
+        console.warn("Sequence analysis fallback:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveMainshock]);
+
+  // Fetch risk forecast grid GeoJSON for active mainshock and forecast window
+  const loadForecastGrid = useCallback(async () => {
+    const centerLat = effectiveMainshock ? effectiveMainshock.lat : 36.0;
+    const centerLon = effectiveMainshock ? effectiveMainshock.lon : 36.0;
+    const delta = 3.5;
+
+    try {
+      const res = await fetch(
+        `/api/risk/grid?min_lat=${(centerLat - delta).toFixed(2)}&max_lat=${(centerLat + delta).toFixed(2)}&min_lon=${(centerLon - delta).toFixed(2)}&max_lon=${(centerLon + delta).toFixed(2)}&resolution=0.25&time_window=${activeWindow}&min_magnitude=${activeMinMag}${effectiveMainshock ? `&mainshock_id=${encodeURIComponent(effectiveMainshock.id)}` : ""}&format=geojson`
+      );
+      if (res.ok) {
+        const geojson = await res.json();
+        setRiskGridFeatures(geojson);
+      }
+    } catch (err) {
+      console.warn("Forecast grid fetch fallback:", err);
+    }
+  }, [effectiveMainshock, activeWindow, activeMinMag]);
+
+  useEffect(() => {
+    loadForecastGrid();
+  }, [loadForecastGrid]);
 
   const getStyleForTheme = (themeName: "light" | "dark" | "grayscale"): maplibregl.StyleSpecification => {
     const spriteVariant = themeName === "dark" ? "dark" : "light";
@@ -263,7 +406,7 @@ export default function MapViewer({
         data: geojson,
       });
 
-      // Events outer glow / aura
+      // Events outer glow
       map.addLayer({
         id: "events-glow",
         type: "circle",
@@ -338,13 +481,12 @@ export default function MapViewer({
               <h4>M ${props.mag} - ${props.place}</h4>
               <p><strong>Depth:</strong> ${props.depth} km</p>
               <p><strong>Time:</strong> ${new Date(props.time).toLocaleString()}</p>
-              <span class="popup-tag">${props.source === "user_report" ? "Local Report" : "USGS"}</span>
+              <span class="popup-tag">${props.source === "user_report" ? "Local Report" : "USGS ComCat"}</span>
             </div>`
           )
           .addTo(map);
       });
 
-      // Cursor hover feedback
       map.on("mouseenter", "events-circles", () => {
         map.getCanvas().style.cursor = "pointer";
       });
@@ -354,80 +496,365 @@ export default function MapViewer({
     }
   }, [buildEventsGeoJSON, onSelectEvent]);
 
-  // Attach a single, clean heatmap layer around the place center
-  const applyHeatmapLayer = useCallback((geojson: FeatureCollection) => {
+  // Update or attach the Tectonic Faults layer
+  const updateFaultsLayer = useCallback((faultsGjson: FeatureCollection<LineString>) => {
     const map = mapRef.current;
     if (!map) return;
 
-    currentHeatmapDataRef.current = geojson;
+    const source = map.getSource("faults-source") as maplibregl.GeoJSONSource | undefined;
+    if (source) {
+      source.setData(faultsGjson);
+    } else {
+      map.addSource("faults-source", {
+        type: "geojson",
+        data: faultsGjson,
+      });
 
-    const source = map.getSource("heatmap-source") as maplibregl.GeoJSONSource | undefined;
+      // Neon glow underneath
+      map.addLayer({
+        id: "faults-glow",
+        type: "line",
+        source: "faults-source",
+        paint: {
+          "line-color": "#fbbf24",
+          "line-width": 6,
+          "line-opacity": 0.4,
+          "line-blur": 2,
+        },
+      });
+
+      // Crisp tectonic trace line
+      map.addLayer({
+        id: "faults-lines",
+        type: "line",
+        source: "faults-source",
+        paint: {
+          "line-color": "#f59e0b",
+          "line-width": 2.5,
+          "line-opacity": 0.9,
+          "line-dasharray": [4, 2],
+        },
+      });
+
+      map.on("click", "faults-lines", (e) => {
+        if (!e.features || e.features.length === 0) return;
+        const feat = e.features[0];
+        const props = feat.properties || {};
+        new maplibregl.Popup({ offset: 12 })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<div class="fault-popup">
+              <h4>⚡ ${props.name || "Tectonic Fault"}</h4>
+              <p><strong>Slip Mechanism:</strong> ${props.type || "Strike-slip / Transform"}</p>
+              <p><strong>Slip Rate:</strong> ~${props.slip_rate_mm_yr || "10-30"} mm/yr</p>
+              <p><strong>Rupture History:</strong> ${props.rupture_history || "Active Holocene plate boundary"}</p>
+              <span class="popup-tag fault-tag">Active Tectonic Fault</span>
+            </div>`
+          )
+          .addTo(map);
+      });
+
+      map.on("mouseenter", "faults-lines", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "faults-lines", () => {
+        map.getCanvas().style.cursor = "";
+      });
+    }
+  }, []);
+
+  // Update or attach the Identified Aftershocks sequence layer
+  const updateAftershocksLayer = useCallback((aftershockList: EarthquakeEvent[]) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const geojson = buildEventsGeoJSON(aftershockList);
+    const source = map.getSource("aftershocks-source") as maplibregl.GeoJSONSource | undefined;
+
     if (source) {
       source.setData(geojson);
+    } else {
+      map.addSource("aftershocks-source", {
+        type: "geojson",
+        data: geojson,
+      });
+
+      // Neon purple aura
+      map.addLayer({
+        id: "aftershocks-glow",
+        type: "circle",
+        source: "aftershocks-source",
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["get", "mag"],
+            3.0, 9,
+            5.0, 15,
+            7.0, 22,
+          ],
+          "circle-color": "rgba(192, 132, 252, 0.35)",
+          "circle-blur": 0.5,
+        },
+      });
+
+      // Distinct cyan/violet ring marker
+      map.addLayer({
+        id: "aftershocks-rings",
+        type: "circle",
+        source: "aftershocks-source",
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["get", "mag"],
+            3.0, 6,
+            5.0, 11,
+            7.0, 17,
+          ],
+          "circle-color": "rgba(192, 132, 252, 0.15)",
+          "circle-stroke-width": 2.5,
+          "circle-stroke-color": "#c084fc",
+          "circle-opacity": 0.9,
+        },
+      });
+
+      map.on("click", "aftershocks-rings", (e) => {
+        if (!e.features || e.features.length === 0) return;
+        const feature = e.features[0];
+        const props = feature.properties;
+        const coords = (feature.geometry as Point).coordinates;
+
+        new maplibregl.Popup({ offset: 15 })
+          .setLngLat([coords[0], coords[1]])
+          .setHTML(
+            `<div class="aftershock-popup">
+              <h4>💫 AFTERSHOCK: M ${props.mag}</h4>
+              <p><strong>Place:</strong> ${props.place}</p>
+              <p><strong>Depth:</strong> ${props.depth} km</p>
+              <p><strong>Time:</strong> ${new Date(props.time).toLocaleString()}</p>
+              <span class="popup-tag aftershock-tag">Clustered Omori Sequence</span>
+            </div>`
+          )
+          .addTo(map);
+      });
+
+      map.on("mouseenter", "aftershocks-rings", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "aftershocks-rings", () => {
+        map.getCanvas().style.cursor = "";
+      });
+    }
+  }, [buildEventsGeoJSON]);
+
+  // Update or attach the Probabilistic Forecast Risk Heatmap & Click Cells
+  const updateRiskGridLayer = useCallback((geojson: FeatureCollection) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const source = map.getSource("risk-grid-source") as maplibregl.GeoJSONSource | undefined;
+    if (source) {
+      source.setData(geojson);
+    } else {
+      map.addSource("risk-grid-source", {
+        type: "geojson",
+        data: geojson,
+      });
+
+      const beforeLayerId = map.getLayer("events-glow") ? "events-glow" : undefined;
+
+      // Probabilistic Heatmap Layer
+      map.addLayer(
+        {
+          id: "risk-forecast-heat",
+          type: "heatmap",
+          source: "risk-grid-source",
+          paint: {
+            "heatmap-weight": [
+              "interpolate",
+              ["linear"],
+              ["coalesce", ["get", "risk_score"], 0],
+              0, 0,
+              0.2, 0.35,
+              0.5, 0.75,
+              1.0, 1.6,
+            ],
+            "heatmap-intensity": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              2, 0.7,
+              6, 1.2,
+              10, 1.8,
+            ],
+            "heatmap-color": [
+              "interpolate",
+              ["linear"],
+              ["heatmap-density"],
+              0, "rgba(0, 0, 0, 0)",
+              0.15, "rgba(56, 189, 248, 0.35)",
+              0.35, "rgba(16, 185, 129, 0.65)",
+              0.60, "rgba(234, 179, 8, 0.85)",
+              0.85, "rgba(239, 68, 68, 0.95)",
+              1.0, "rgba(168, 85, 247, 1.0)",
+            ],
+            "heatmap-radius": [
+              "interpolate",
+              ["exponential", 2],
+              ["zoom"],
+              2, 10,
+              5, 30,
+              8, 70,
+              11, 140,
+            ],
+            "heatmap-opacity": 0.85,
+          },
+        },
+        beforeLayerId
+      );
+
+      // Interactive telemetry click targets for each grid point
+      map.addLayer({
+        id: "risk-grid-cells",
+        type: "circle",
+        source: "risk-grid-source",
+        paint: {
+          "circle-radius": 14,
+          "circle-opacity": 0.01,
+          "circle-stroke-width": 0,
+        },
+      });
+
+      map.on("click", "risk-grid-cells", (e) => {
+        if (!e.features || e.features.length === 0) return;
+        const feat = e.features[0];
+        const props = feat.properties || {};
+        const coords = (feat.geometry as Point).coordinates;
+
+        const score = typeof props.risk_score === "number" ? props.risk_score : 0;
+        const prob = typeof props.probability === "number" ? props.probability : 0;
+        const rate = typeof props.expected_rate === "number" ? props.expected_rate : 0;
+        const relRisk = typeof props.relative_risk === "number" ? props.relative_risk : 1;
+
+        new maplibregl.Popup({ offset: 12 })
+          .setLngLat([coords[0], coords[1]])
+          .setHTML(
+            `<div class="risk-cell-popup">
+              <h4>🔥 Forecast Risk Cell (${activeWindow})</h4>
+              <p><strong>Coordinates:</strong> ${coords[1].toFixed(3)}°N, ${coords[0].toFixed(3)}°E</p>
+              <p><strong>Expected Rate &lambda;:</strong> ${rate.toFixed(4)} events/day</p>
+              <p><strong>Poisson P(M &ge; ${activeMinMag}):</strong> ${(prob * 100).toFixed(1)}%</p>
+              <p><strong>Relative Risk:</strong> ${relRisk.toFixed(1)}x baseline</p>
+              <p><strong>Risk Index:</strong> ${(score * 100).toFixed(0)}%</p>
+              <span class="popup-tag">${(props.risk_level || "elevated").toUpperCase()} SECTOR</span>
+            </div>`
+          )
+          .addTo(map);
+      });
+
+      map.on("mouseenter", "risk-grid-cells", () => {
+        map.getCanvas().style.cursor = "crosshair";
+      });
+      map.on("mouseleave", "risk-grid-cells", () => {
+        map.getCanvas().style.cursor = "";
+      });
+    }
+  }, [activeWindow, activeMinMag]);
+
+  // Update or attach the Mainshock Beacon & Rupture Zone Buffer
+  const updateMainshockBeaconAndBuffer = useCallback((mainshock: EarthquakeEvent | null) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Remove existing mainshock HTML marker
+    if (mainshockMarkerRef.current) {
+      mainshockMarkerRef.current.remove();
+      mainshockMarkerRef.current = null;
+    }
+
+    if (!mainshock || !showMainshockLayer) {
+      // Clear rupture buffer source if exists
+      const ruptureSource = map.getSource("mainshock-rupture-source") as maplibregl.GeoJSONSource | undefined;
+      if (ruptureSource) {
+        ruptureSource.setData({ type: "FeatureCollection", features: [] });
+      }
       return;
     }
 
-    map.addSource("heatmap-source", {
-      type: "geojson",
-      data: geojson,
-    });
+    // 1. Create animated beacon marker element
+    const el = document.createElement("div");
+    el.className = "mainshock-beacon-marker";
+    el.innerHTML = `
+      <div class="mainshock-radar-ring"></div>
+      <div class="mainshock-radar-ring-outer"></div>
+      <div class="mainshock-core-star">★</div>
+    `;
 
-    const beforeLayerId = map.getLayer("events-glow") ? "events-glow" : undefined;
-    map.addLayer(
-      {
-        id: "earthquake-heat",
-        type: "heatmap",
-        source: "heatmap-source",
-        paint: {
-          "heatmap-weight": [
-            "interpolate",
-            ["linear"],
-            ["coalesce", ["get", "mag"], 4],
-            2, 0.5,
-            5, 1.0,
-            7.5, 2.0,
-          ],
-          "heatmap-intensity": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            1, 0.7,
-            5, 1.0,
-            9, 1.3,
-          ],
-          "heatmap-color": [
-            "interpolate",
-            ["linear"],
-            ["heatmap-density"],
-            0, "rgba(0, 0, 0, 0)",
-            0.2, "rgba(56, 189, 248, 0.45)",
-            0.45, "rgba(250, 204, 21, 0.75)",
-            0.7, "rgba(251, 146, 60, 0.88)",
-            0.9, "rgba(239, 68, 68, 0.95)",
-            1.0, "rgba(185, 28, 28, 1)",
-          ],
-          "heatmap-radius": [
-            "interpolate",
-            ["exponential", 2],
-            ["zoom"],
-            1, 2,
-            3, 8,
-            5, 32,
-            7, 128,
-            9, 320,
-            12, 500,
-          ],
-          "heatmap-opacity": 0.82,
-        },
-      },
-      beforeLayerId
+    const ruptureKm = Math.max(15.0, 10 ** (0.5 * mainshock.magnitude - 1.8));
+
+    const popup = new maplibregl.Popup({ offset: 25 }).setHTML(
+      `<div class="mainshock-popup">
+        <h4>★ SEQUENCE MAINSHOCK: M ${mainshock.magnitude}</h4>
+        <p><strong>Location:</strong> ${mainshock.place || "Primary Rupture"}</p>
+        <p><strong>Origin Time:</strong> ${new Date(mainshock.time).toLocaleString()}</p>
+        <p><strong>Depth:</strong> ${mainshock.depth_km ?? 10} km</p>
+        <p><strong>Est. Rupture Length:</strong> ~${ruptureKm.toFixed(1)} km</p>
+        <span class="popup-tag mainshock-tag">Primary Rupture Beacon</span>
+      </div>`
     );
-  }, []);
 
+    mainshockMarkerRef.current = new maplibregl.Marker({ element: el })
+      .setLngLat([mainshock.lon, mainshock.lat])
+      .setPopup(popup)
+      .addTo(map);
 
+    // 2. Rupture Zone Buffer Circle Layer
+    const bufferGeojson = buildCircleGeoJSON(mainshock.lon, mainshock.lat, ruptureKm * 1.5);
+    const ruptureSource = map.getSource("mainshock-rupture-source") as maplibregl.GeoJSONSource | undefined;
 
-  // Main function: geocode location, center map, and create single heatmap around it
-  const handleGenerateHeatmap = useCallback(async (placeQuery: string) => {
+    if (ruptureSource) {
+      ruptureSource.setData(bufferGeojson);
+    } else {
+      map.addSource("mainshock-rupture-source", {
+        type: "geojson",
+        data: bufferGeojson,
+      });
+
+      const beforeId = map.getLayer("faults-glow") ? "faults-glow" : undefined;
+
+      map.addLayer(
+        {
+          id: "mainshock-rupture-fill",
+          type: "fill",
+          source: "mainshock-rupture-source",
+          paint: {
+            "fill-color": "#ef4444",
+            "fill-opacity": 0.14,
+          },
+        },
+        beforeId
+      );
+
+      map.addLayer(
+        {
+          id: "mainshock-rupture-line",
+          type: "line",
+          source: "mainshock-rupture-source",
+          paint: {
+            "line-color": "#ef4444",
+            "line-width": 2,
+            "line-dasharray": [3, 2],
+            "line-opacity": 0.85,
+          },
+        },
+        beforeId
+      );
+    }
+  }, [showMainshockLayer]);
+
+  // Main function: geocode location & center map
+  const handleCenterPlace = useCallback(async (placeQuery: string) => {
     const trimmed = placeQuery.trim();
     if (!trimmed) {
       setSearchFeedback("Please enter a place name");
@@ -435,7 +862,7 @@ export default function MapViewer({
     }
 
     setIsSearching(true);
-    setSearchFeedback("Locating place & generating heatmap...");
+    setSearchFeedback("Locating place & aligning basemap...");
 
     try {
       const location = await geocodePlace(trimmed);
@@ -473,7 +900,7 @@ export default function MapViewer({
           `<div class="epicenter-popup">
             <h4>${location.name}</h4>
             <p><strong>Center:</strong> ${location.lat.toFixed(4)}°, ${location.lon.toFixed(4)}°</p>
-            <span class="popup-tag">Single Heatmap Focus</span>
+            <span class="popup-tag">Seismic Focus</span>
           </div>`
         );
 
@@ -485,25 +912,15 @@ export default function MapViewer({
         centerMarkerRef.current = marker;
       }
 
-      // Generate heatmap directly from real live earthquake events from USGS
-      const geojson = buildEventsGeoJSON(events);
-      applyHeatmapLayer(geojson);
-
-      setHeatmapStats({
-        locationName: location.name,
-        centerLat: location.lat,
-        centerLon: location.lon,
-      });
-
-      setSearchFeedback(`Heatmap centered on ${location.name.split(",")[0]}`);
+      setSearchFeedback(`Basemap centered on ${location.name.split(",")[0]}`);
       setTimeout(() => setSearchFeedback(null), 4000);
     } catch (err: unknown) {
-      console.error("Heatmap generation error:", err);
-      setSearchFeedback("Failed to generate heatmap. Please retry.");
+      console.error("Geocoding error:", err);
+      setSearchFeedback("Failed to locate place. Please retry.");
     } finally {
       setIsSearching(false);
     }
-  }, [applyHeatmapLayer]);
+  }, []);
 
   // Initial MapLibre mount
   useEffect(() => {
@@ -529,23 +946,25 @@ export default function MapViewer({
         setMapLoaded(true);
         map.resize();
 
-        // Initial single heatmap center
         if (initialPlace) {
-          handleGenerateHeatmap(initialPlace);
+          handleCenterPlace(initialPlace);
         } else {
-          handleGenerateHeatmap("Tokyo");
+          handleCenterPlace("Turkey");
         }
 
-        // Render events
-        if (events.length > 0) {
-          updateEventsLayer(events);
+        if (faultsData) {
+          updateFaultsLayer(faultsData);
+        }
+        if (displayedEvents.length > 0) {
+          updateEventsLayer(displayedEvents);
         }
       });
 
       // Click on map to inspect coordinates or trigger risk evaluation
       map.on("click", (e) => {
-        // Prevent if clicking on marker layer
-        const features = map.queryRenderedFeatures(e.point, { layers: ["events-circles"] });
+        const features = map.queryRenderedFeatures(e.point, {
+          layers: ["events-circles", "aftershocks-rings", "faults-lines", "risk-grid-cells"],
+        });
         if (features && features.length > 0) return;
 
         const coords = { lat: e.lngLat.lat, lon: e.lngLat.lng };
@@ -553,7 +972,6 @@ export default function MapViewer({
           onMapClick(coords);
         }
 
-        // Update click marker
         if (clickMarkerRef.current) {
           clickMarkerRef.current.remove();
         }
@@ -576,23 +994,6 @@ export default function MapViewer({
           .addTo(map);
       });
 
-      // Re-apply layers when style loads
-      map.on("style.load", () => {
-        if (currentHeatmapDataRef.current) {
-          applyHeatmapLayer(currentHeatmapDataRef.current);
-        }
-        if (events.length > 0) {
-          updateEventsLayer(events);
-        }
-      });
-
-      const timeoutId = setTimeout(() => {
-        setMapLoaded(true);
-        if (mapRef.current) {
-          mapRef.current.resize();
-        }
-      }, 2000);
-
       map.on("move", () => {
         const center = map.getCenter();
         const zoom = map.getZoom();
@@ -613,10 +1014,10 @@ export default function MapViewer({
       window.addEventListener("resize", handleResize);
 
       return () => {
-        clearTimeout(timeoutId);
         window.removeEventListener("resize", handleResize);
         if (centerMarkerRef.current) centerMarkerRef.current.remove();
         if (clickMarkerRef.current) clickMarkerRef.current.remove();
+        if (mainshockMarkerRef.current) mainshockMarkerRef.current.remove();
         map.remove();
         mapRef.current = null;
         maplibregl.removeProtocol("pmtiles");
@@ -625,17 +1026,76 @@ export default function MapViewer({
       console.error("Failed to initialize map:", err);
       setLoadError(err instanceof Error ? err.message : "Failed to initialize map");
     }
-  }, [activeTheme, applyHeatmapLayer, handleGenerateHeatmap, initialPlace]);
+  }, [activeTheme, handleCenterPlace, initialPlace]);
 
-  // Sync events and heatmap layer when displayedEvents changes
+  // Sync events and layers when data changes
   useEffect(() => {
     if (mapLoaded && mapRef.current) {
       updateEventsLayer(displayedEvents);
-      if (displayedEvents.length > 0) {
-        applyHeatmapLayer(buildEventsGeoJSON(displayedEvents));
+      updateAftershocksLayer(identifiedAftershocks);
+      updateFaultsLayer(faultsData);
+      updateMainshockBeaconAndBuffer(effectiveMainshock);
+      if (riskGridFeatures) {
+        updateRiskGridLayer(riskGridFeatures);
       }
     }
-  }, [displayedEvents, mapLoaded, updateEventsLayer, applyHeatmapLayer, buildEventsGeoJSON]);
+  }, [
+    mapLoaded,
+    displayedEvents,
+    identifiedAftershocks,
+    faultsData,
+    effectiveMainshock,
+    riskGridFeatures,
+    updateEventsLayer,
+    updateAftershocksLayer,
+    updateFaultsLayer,
+    updateMainshockBeaconAndBuffer,
+    updateRiskGridLayer,
+  ]);
+
+  // Toggle layer visibilities in MapLibre
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+
+    if (map.getLayer("risk-forecast-heat")) {
+      map.setLayoutProperty("risk-forecast-heat", "visibility", showForecastHeatmap ? "visible" : "none");
+    }
+    if (map.getLayer("risk-grid-cells")) {
+      map.setLayoutProperty("risk-grid-cells", "visibility", showForecastHeatmap ? "visible" : "none");
+    }
+    if (map.getLayer("faults-lines")) {
+      map.setLayoutProperty("faults-lines", "visibility", showFaultsLayer ? "visible" : "none");
+    }
+    if (map.getLayer("faults-glow")) {
+      map.setLayoutProperty("faults-glow", "visibility", showFaultsLayer ? "visible" : "none");
+    }
+    if (map.getLayer("aftershocks-rings")) {
+      map.setLayoutProperty("aftershocks-rings", "visibility", showAftershocksLayer ? "visible" : "none");
+    }
+    if (map.getLayer("aftershocks-glow")) {
+      map.setLayoutProperty("aftershocks-glow", "visibility", showAftershocksLayer ? "visible" : "none");
+    }
+    if (map.getLayer("events-circles")) {
+      map.setLayoutProperty("events-circles", "visibility", showEventsLayer ? "visible" : "none");
+    }
+    if (map.getLayer("events-glow")) {
+      map.setLayoutProperty("events-glow", "visibility", showEventsLayer ? "visible" : "none");
+    }
+    if (map.getLayer("mainshock-rupture-fill")) {
+      map.setLayoutProperty("mainshock-rupture-fill", "visibility", showMainshockLayer ? "visible" : "none");
+    }
+    if (map.getLayer("mainshock-rupture-line")) {
+      map.setLayoutProperty("mainshock-rupture-line", "visibility", showMainshockLayer ? "visible" : "none");
+    }
+  }, [
+    showForecastHeatmap,
+    showFaultsLayer,
+    showAftershocksLayer,
+    showEventsLayer,
+    showMainshockLayer,
+    mapLoaded,
+  ]);
 
   // Sync selected event camera fly-to
   useEffect(() => {
@@ -683,29 +1143,6 @@ export default function MapViewer({
     }
   }, [targetCoords]);
 
-  // Toggle layer visibilities
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapLoaded) return;
-
-    if (map.getLayer("earthquake-heat")) {
-      map.setLayoutProperty("earthquake-heat", "visibility", showHeatmapLayer ? "visible" : "none");
-    }
-  }, [showHeatmapLayer, mapLoaded]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapLoaded) return;
-
-    if (map.getLayer("events-circles")) {
-      map.setLayoutProperty("events-circles", "visibility", showEventsLayer ? "visible" : "none");
-    }
-    if (map.getLayer("events-glow")) {
-      map.setLayoutProperty("events-glow", "visibility", showEventsLayer ? "visible" : "none");
-    }
-  }, [showEventsLayer, mapLoaded]);
-
-  // Update theme dynamically
   const switchTheme = (theme: "light" | "dark" | "grayscale") => {
     setActiveTheme(theme);
     if (mapRef.current) {
@@ -729,7 +1166,6 @@ export default function MapViewer({
         body: JSON.stringify({ days_back: 30, min_magnitude: 2.5 }),
       });
       const data = (await response.json()) as {
-        status?: string;
         events_fetched?: number;
         last_catalog_update?: string;
         data_as_of?: string;
@@ -743,10 +1179,7 @@ export default function MapViewer({
       setLastSyncTime(syncedAt);
       const countInfo = data.events_fetched !== undefined ? ` (+${data.events_fetched} live quakes)` : "";
       setSearchFeedback(`Live USGS catalog synchronized${countInfo}`);
-
-      if (onSyncSuccess) {
-        onSyncSuccess();
-      }
+      onSyncSuccess?.();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Catalog synchronization failed";
       setSearchFeedback(`${message}. Existing cached data was preserved.`);
@@ -759,15 +1192,25 @@ export default function MapViewer({
   const onSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchInput.trim()) {
-      handleGenerateHeatmap(searchInput);
+      handleCenterPlace(searchInput);
     }
   };
 
-  const presetPlaces = ["Tokyo", "San Francisco", "Kochi", "Chile", "Nepal", "Turkey"];
+  const handleForecastWindowChange = (w: "24h" | "72h" | "7d") => {
+    setInternalForecastWindow(w);
+    onChangeForecastWindow?.(w);
+  };
+
+  const handleMinMagChange = (m: number) => {
+    setInternalMinMagnitude(m);
+    onChangeMinMagnitude?.(m);
+  };
+
+  const presetPlaces = ["Turkey", "Tokyo", "San Francisco", "Chile", "Nepal", "Kochi"];
 
   return (
     <div className="map-view-container">
-      {/* Top Floating Header & Controls */}
+      {/* Top Floating Control Bar */}
       <header className="map-top-bar">
         {onBack && (
           <div className="map-top-left">
@@ -782,7 +1225,7 @@ export default function MapViewer({
           </div>
         )}
 
-        {/* Floating Location Search Input Box */}
+        {/* Floating Location Search Input */}
         <div className="map-search-wrapper">
           <form className="search-form" onSubmit={onSearchSubmit}>
             <div className="search-input-group">
@@ -790,7 +1233,7 @@ export default function MapViewer({
               <input
                 type="text"
                 className="search-input"
-                placeholder="Enter place name (e.g. Tokyo, San Francisco, Kochi)..."
+                placeholder="Enter place name (e.g. Turkey, Tokyo, San Francisco)..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 disabled={isSearching}
@@ -812,12 +1255,12 @@ export default function MapViewer({
                 disabled={isSearching || !searchInput.trim()}
                 id="generate-heatmap-button"
               >
-                {isSearching ? <span className="btn-spinner" /> : <span>Center Heatmap</span>}
+                {isSearching ? <span className="btn-spinner" /> : <span>Focus Basemap</span>}
               </button>
             </div>
           </form>
 
-          {/* Quick preset location tags */}
+          {/* Quick Presets */}
           <div className="search-presets">
             <span className="presets-label">Quick:</span>
             {presetPlaces.map((place) => (
@@ -827,7 +1270,7 @@ export default function MapViewer({
                 className={`preset-chip ${activeLocation?.name.includes(place) ? "active" : ""}`}
                 onClick={() => {
                   setSearchInput(place);
-                  handleGenerateHeatmap(place);
+                  handleCenterPlace(place);
                 }}
               >
                 {place}
@@ -844,6 +1287,74 @@ export default function MapViewer({
         </div>
 
         <div className="map-top-right">
+          {/* Mainshock Selector Dropdown */}
+          <div className="mainshock-selector-group">
+            <span className="scenario-label font-mono">MAINSHOCK:</span>
+            <select
+              className="mainshock-dropdown font-mono"
+              value={effectiveMainshock?.id || ""}
+              onChange={(e) => {
+                const found = events.find((ev) => ev.id === e.target.value);
+                onSelectMainshock?.(found || null);
+              }}
+              title="Select sequence mainshock"
+            >
+              <option value="">
+                {effectiveMainshock ? `★ Auto: M${effectiveMainshock.magnitude.toFixed(1)} (${effectiveMainshock.place?.slice(0, 15)}...)` : "-- Auto: No Mainshock --"}
+              </option>
+              {events
+                .filter((ev) => ev.magnitude >= 4.5)
+                .sort((a, b) => b.magnitude - a.magnitude)
+                .map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    M{ev.magnitude.toFixed(1)} - {ev.place?.slice(0, 20) || ev.id}
+                  </option>
+                ))}
+            </select>
+            {effectiveMainshock && (
+              <button
+                type="button"
+                className="btn-clear-mainshock"
+                onClick={() => onSelectMainshock?.(null)}
+                title="Clear selected mainshock"
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div>
+
+          {/* Forecast Horizon Window Toggle */}
+          <div className="forecast-window-selector">
+            <span className="scenario-label font-mono">WINDOW:</span>
+            {(["24h", "72h", "7d"] as const).map((w) => (
+              <button
+                key={w}
+                type="button"
+                className={`forecast-window-btn font-mono ${activeWindow === w ? "active" : ""}`}
+                onClick={() => handleForecastWindowChange(w)}
+                title={`Set aftershock risk forecast window to ${w}`}
+              >
+                {w}
+              </button>
+            ))}
+          </div>
+
+          {/* Minimum Magnitude Slider */}
+          <div className="mag-toolbar-slider">
+            <span className="mag-toolbar-label font-mono">Min Mag:</span>
+            <span className="mag-toolbar-val font-mono">M{activeMinMag.toFixed(1)}</span>
+            <input
+              type="range"
+              min="2.0"
+              max="6.0"
+              step="0.5"
+              value={activeMinMag}
+              onChange={(e) => handleMinMagChange(parseFloat(e.target.value))}
+              className="mag-toolbar-input"
+              title={`Filter events and forecast to magnitude >= ${activeMinMag.toFixed(1)}`}
+            />
+          </div>
+
           {/* Scenario Selector Dropdown */}
           <div className="scenario-selector-group">
             <span className="scenario-label font-mono">SCENARIO:</span>
@@ -860,26 +1371,51 @@ export default function MapViewer({
             </select>
           </div>
 
-          {/* Layer toggles */}
+          {/* Layer visibility toggles */}
           <div className="layer-toggle-group">
             <button
               type="button"
-              className={`layer-btn ${showHeatmapLayer ? "active" : ""}`}
-              onClick={() => setShowHeatmapLayer((prev) => !prev)}
-              title="Toggle Heatmap Layer"
+              className={`layer-btn ${showForecastHeatmap ? "active" : ""}`}
+              onClick={() => setShowForecastHeatmap((prev) => !prev)}
+              title="Toggle Probabilistic Omori Forecast Heatmap"
             >
-              🔥 Heatmap
+              🔥 Forecast
+            </button>
+            <button
+              type="button"
+              className={`layer-btn ${showFaultsLayer ? "active" : ""}`}
+              onClick={() => setShowFaultsLayer((prev) => !prev)}
+              title="Toggle Tectonic Fault Traces"
+            >
+              ⚡ Faults
+            </button>
+            <button
+              type="button"
+              className={`layer-btn ${showAftershocksLayer ? "active" : ""}`}
+              onClick={() => setShowAftershocksLayer((prev) => !prev)}
+              title="Toggle Identified Aftershock Rings"
+            >
+              💫 Aftershocks ({identifiedAftershocks.length})
+            </button>
+            <button
+              type="button"
+              className={`layer-btn ${showMainshockLayer ? "active" : ""}`}
+              onClick={() => setShowMainshockLayer((prev) => !prev)}
+              title="Toggle Mainshock Beacon & Rupture Buffer"
+            >
+              ★ Mainshock
             </button>
             <button
               type="button"
               className={`layer-btn ${showEventsLayer ? "active" : ""}`}
               onClick={() => setShowEventsLayer((prev) => !prev)}
-              title="Toggle Earthquake Event Dots"
+              title="Toggle Observed Quakes"
             >
-              ⚡ Events ({events.length})
+              • Quakes ({displayedEvents.length})
             </button>
           </div>
 
+          {/* Theme toggles */}
           <div className="theme-toggle-group">
             <button
               className={`theme-btn ${activeTheme === "light" ? "active" : ""}`}
@@ -907,6 +1443,7 @@ export default function MapViewer({
           <button className="btn-secondary" onClick={handleResetView} title="Reset camera to world overview">
             Reset View
           </button>
+
           <button
             className="btn-sync"
             onClick={() => void handleSyncCatalog()}
@@ -914,77 +1451,113 @@ export default function MapViewer({
             title="Download live earthquake catalog from USGS"
           >
             {isSyncing ? <span className="btn-spinner" /> : "↻"}{" "}
-            {isSyncing ? "Syncing..." : "Sync USGS"}
+            {isSyncing ? "Syncing..." : isOffline ? "Offline Cache" : "Sync USGS"}
           </button>
         </div>
       </header>
 
-      {/* Heatmap Legend and Active Center Info Overlay */}
-      {heatmapStats && (
-        <aside className={`heatmap-info-card ${!isLegendExpanded ? "minimized" : ""}`}>
-          <div
-            className="heatmap-info-header"
-            onClick={() => setIsLegendExpanded((prev) => !prev)}
-            role="button"
-            tabIndex={0}
-            title={isLegendExpanded ? "Click to minimize card" : "Click to expand card"}
-          >
-            <span className="heatmap-fire-icon">🔥</span>
-            <div className="heatmap-header-titles">
-              <h3 className="heatmap-location-title">{heatmapStats.locationName}</h3>
-              <p className="heatmap-coords">
-                {heatmapStats.centerLat.toFixed(3)}°, {heatmapStats.centerLon.toFixed(3)}°
-              </p>
+      {/* Scientific Legend & Forecast HUD */}
+      <aside className={`scientific-legend-card ${!isLegendExpanded ? "minimized" : ""}`}>
+        <div
+          className="legend-card-header"
+          onClick={() => setIsLegendExpanded((prev) => !prev)}
+          role="button"
+          tabIndex={0}
+        >
+          <h3 className="legend-title">
+            <span>🔬 Risk Model & Symbology</span>
+            <span className="legend-formula-badge font-mono">{activeWindow}</span>
+          </h3>
+          <button type="button" className="card-collapse-btn">
+            {isLegendExpanded ? "▾" : "▴"}
+          </button>
+        </div>
+
+        {isLegendExpanded && (
+          <>
+            <div className="legend-section-heading">Relative Risk Scale (R / R₀)</div>
+            <div className="legend-gradient-bar" />
+            <div className="legend-label-row">
+              <span>Low (&lt;1.5x)</span>
+              <span>Elevated</span>
+              <span>High (&gt;10x)</span>
             </div>
-            <button
-              type="button"
-              className="card-collapse-btn"
-              aria-label={isLegendExpanded ? "Minimize card" : "Expand card"}
-            >
-              {isLegendExpanded ? "▾" : "▴"}
-            </button>
-          </div>
 
-          {isLegendExpanded && (
-            <>
-              <div className="heatmap-legend">
-                <div className="legend-label-row">
-                  <span>Low</span>
-                  <span>Thermal Intensity</span>
-                  <span>High</span>
-                </div>
-                <div className="legend-gradient-bar" />
+            <div className="legend-section-heading">Occurrence Probability P(N ≥ 1)</div>
+            <div className="legend-symbology-grid font-mono">
+              <div className="legend-symbology-item">
+                <span className="symbol-icon text-cyan">•</span>
+                <span>Low: &lt; 5%</span>
               </div>
+              <div className="legend-symbology-item">
+                <span className="symbol-icon text-emerald">•</span>
+                <span>Moderate: 5% - 20%</span>
+              </div>
+              <div className="legend-symbology-item">
+                <span className="symbol-icon text-orange">•</span>
+                <span>Elevated: 20% - 50%</span>
+              </div>
+              <div className="legend-symbology-item">
+                <span className="symbol-icon text-red">•</span>
+                <span>Critical: &gt; 50%</span>
+              </div>
+            </div>
 
-              <div className="heatmap-metrics-row">
+            <div className="legend-section-heading">Map Symbology</div>
+            <div className="legend-symbology-grid">
+              <div className="legend-symbology-item">
+                <span className="symbol-icon text-red">★</span>
+                <span>Sequence Mainshock Beacon</span>
+              </div>
+              <div className="legend-symbology-item">
+                <span className="symbol-icon text-purple">💫</span>
+                <span>Identified Aftershock Ring</span>
+              </div>
+              <div className="legend-symbology-item">
+                <span className="symbol-line-fault" />
+                <span>Active Tectonic Fault Trace</span>
+              </div>
+              <div className="legend-symbology-item">
+                <span className="symbol-icon text-cyan">•</span>
+                <span>Observed Earthquakes (USGS)</span>
+              </div>
+            </div>
+
+            {effectiveMainshock && (
+              <div className="heatmap-metrics-row" style={{ marginTop: "10px" }}>
                 <div className="metric-item">
-                  <span className="metric-val">1 Center</span>
-                  <span className="metric-lbl">Epicenter</span>
+                  <span className="metric-val font-mono">M{effectiveMainshock.magnitude.toFixed(1)}</span>
+                  <span className="metric-lbl">Mainshock</span>
                 </div>
                 <div className="metric-item">
-                  <span className="metric-val">Radial</span>
-                  <span className="metric-lbl">Gradient</span>
+                  <span className="metric-val font-mono">{identifiedAftershocks.length}</span>
+                  <span className="metric-lbl">Aftershocks</span>
                 </div>
                 <div className="metric-item">
-                  <span className="metric-val">{events.length}</span>
-                  <span className="metric-lbl">Earthquakes</span>
+                  <span className="metric-val font-mono">
+                    {sequenceDetails?.omori_fit?.p ? `p=${sequenceDetails.omori_fit.p.toFixed(2)}` : "Omori"}
+                  </span>
+                  <span className="metric-lbl">Decay Rate</span>
                 </div>
               </div>
-              {lastSyncTime && (
-                <p className="heatmap-sync-time">
-                  Catalog synced: {new Date(lastSyncTime).toLocaleTimeString()}
-                </p>
-              )}
-            </>
-          )}
-        </aside>
-      )}
+            )}
+
+            <p className="legend-disclaimer">
+              ⚠️ Scientific Notice: Probabilistic aftershock forecasting based on the modified Omori-Utsu decay law and inhomogeneous Poisson processes. Not a deterministic prediction of exact times or locations.
+            </p>
+            {lastSyncTime && (
+              <p style={{ fontSize: "0.64rem", color: "var(--text-dim)", marginTop: "6px", fontFamily: "var(--font-mono)" }}>
+                Catalog synced: {new Date(lastSyncTime).toLocaleTimeString()}
+              </p>
+            )}
+          </>
+        )}
+      </aside>
 
       {/* Unified Mission-Control Timeline & Telemetry Console */}
       <footer className="timeline-scrubber-bar mission-control-console">
-        {/* Top Control & Telemetry Row */}
         <div className="timeline-dock-header">
-          {/* Left: Playback Controls */}
+          {/* Playback Controls */}
           <div className="timeline-controls-left">
             <button
               type="button"
@@ -1015,8 +1588,9 @@ export default function MapViewer({
           {/* Center: Shock Counter Telemetry */}
           <div className="timeline-dock-center">
             <span className="timeline-shock-badge font-mono">
-              ⚡ <strong className="text-cyan">{displayedEvents.length}</strong> of {sortedEvents.length} shocks
-              <span className="timeline-pct-tag">({timelinePercent.toFixed(0)}%)</span>
+              ⚡ <strong className="text-cyan">{displayedEvents.length}</strong> shocks (
+              <span className="text-purple">{identifiedAftershocks.length} aftershocks</span>)
+              <span className="timeline-pct-tag">[{timelinePercent.toFixed(0)}%]</span>
             </span>
           </div>
 
@@ -1026,15 +1600,15 @@ export default function MapViewer({
             <span className="dock-zoom-badge">z{viewportInfo.zoom}</span>
             <span className="dock-tip-pill" title="Click anywhere on the map to evaluate site-specific seismic hazard">
               <span className="click-hint-full">💡 Click map for risk</span>
-              <span className="click-hint-short">💡 Click for risk</span>
+              <span className="click-hint-short">💡 Risk inspect</span>
             </span>
           </div>
         </div>
 
-        {/* Bottom: Sequence Range Track */}
+        {/* Timeline Slider Track */}
         <div className="timeline-slider-container">
           <div className="timeline-slider-track-row">
-            <span className="timeline-edge-label font-mono">T-0 (Sequence Start)</span>
+            <span className="timeline-edge-label font-mono">T-0 (Start)</span>
             <div className="timeline-range-wrapper">
               <input
                 type="range"

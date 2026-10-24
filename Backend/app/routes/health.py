@@ -24,6 +24,6 @@ def status():
         "local_events_added": meta.get("local_events_added", 0),
         "last_catalog_update": last_update or None,
         "source": "USGS ComCat",
-        "model": model_name,
+        "model": "omori-style-v1",
         "model_name": model_name,
     }, 200

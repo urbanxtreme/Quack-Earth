@@ -103,7 +103,7 @@ def calculate_risk():
         return error("radius_km must be positive", 422)
 
     time_window = request.args.get("time_window", "24h")
-    if time_window not in ("24h", "7d"):
+    if time_window not in ("24h", "72h", "7d"):
         return error("time_window must be '24h' or '7d'", 422)
 
     min_mag_val = request.args.get("min_magnitude")
@@ -111,6 +111,8 @@ def calculate_risk():
         min_magnitude = float(min_mag_val) if min_mag_val is not None else 4.0
     except (ValueError, TypeError):
         return error("min_magnitude must be a number", 400)
+
+    mainshock_id = request.args.get("mainshock_id") or request.args.get("trigger_event_id")
 
     try:
         risk_service = current_app.extensions["risk_service"]
@@ -120,6 +122,7 @@ def calculate_risk():
             radius_km=radius_km,
             time_window=time_window,
             min_magnitude=min_magnitude,
+            mainshock_id=mainshock_id,
         )
         return result, 200
     except Exception as exc:
@@ -230,14 +233,16 @@ def calculate_grid():
         return error("resolution must be positive", 422)
 
     time_window = request.args.get("time_window", "24h")
-    if time_window not in ("24h", "7d"):
-        return error("time_window must be '24h' or '7d'", 422)
+    if time_window not in ("24h", "7d", "72h"):
+        return error("time_window must be '24h', '72h', or '7d'", 422)
 
     min_mag_val = request.args.get("min_magnitude")
     try:
         min_magnitude = float(min_mag_val) if min_mag_val is not None else 4.0
     except (ValueError, TypeError):
         return error("min_magnitude must be a number", 400)
+
+    mainshock_id = request.args.get("mainshock_id") or request.args.get("trigger_event_id")
 
     try:
         risk_service = current_app.extensions["risk_service"]
@@ -249,6 +254,7 @@ def calculate_grid():
             resolution=resolution,
             time_window=time_window,
             min_magnitude=min_magnitude,
+            mainshock_id=mainshock_id,
         )
 
         output_format = request.args.get("format", "json").lower()
@@ -264,6 +270,13 @@ def calculate_grid():
                         "risk_score": cell["risk_score"],
                         "risk_level": cell.get("risk_level", "low"),
                         "relative_risk": cell.get("relative_risk", 1.0),
+                        "expected_rate": cell.get("expected_rate", 0.0),
+                        "expected_rate_unit": cell.get("expected_rate_unit", "events/day"),
+                        "expected_events": cell.get("expected_events", 0.0),
+                        "probability": cell.get("probability", cell.get("probability_24h", 0.0)),
+                        "probability_24h": cell.get("probability_24h", 0.0),
+                        "probability_7d": cell.get("probability_7d", 0.0),
+                        "data_quality": cell.get("data_quality", "nominal"),
                     },
                 }
                 for cell in result["grid"]
@@ -271,6 +284,13 @@ def calculate_grid():
             return {
                 "type": "FeatureCollection",
                 "time_window": time_window,
+                "min_magnitude": min_magnitude,
+                "mainshock_id": result.get("mainshock_id"),
+                "model": result.get("model", "omori-style-v1"),
+                "data_source": result.get("data_source", "USGS ComCat & Edge Cache"),
+                "catalog_freshness": result.get("catalog_freshness"),
+                "generated_at": result.get("generated_at"),
+                "limitations": result.get("limitations", []),
                 "features": features,
             }, 200
 
@@ -289,7 +309,8 @@ def get_model_params():
         return error("Risk service not initialized", 500)
     params = getattr(risk_service, "params", None)
     return {
-        "model_name": getattr(risk_service, "model_name", "quack-risk-etas-v1"),
+        "model_name": "quack-risk-etas-v1",
+        "model": getattr(risk_service, "model_name", "omori-style-v1"),
         "params": {
             "k": getattr(params, "k", risk_service.k),
             "c_days": getattr(params, "c_days", risk_service.c_days),

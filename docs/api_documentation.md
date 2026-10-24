@@ -24,15 +24,17 @@ No authentication is required for prototype development.
 
 ## Endpoints Overview
 
-| Method | Endpoint              | Description                                             |
-|--------|-----------------------|---------------------------------------------------------|
-| GET    | `/status`             | System operational status, mode, and cache metadata     |
-| GET    | `/risk`               | Calculate short-term risk scores for a circular area    |
-| GET    | `/events`             | Retrieve recent earthquakes from the local cache        |
-| POST   | `/local-event`        | Add a local event/report and update risk evaluations    |
-| POST   | `/refresh-catalog`    | Download latest catalog from USGS (online only)         |
-| GET    | `/risk/grid`          | Get risk values on a regular grid (for heatmaps)        |
-| POST   | `/forecasts`          | Compute aftershock hazard triggered by a specific event |
+| Method | Endpoint                    | Description                                             |
+|--------|-----------------------------|---------------------------------------------------------|
+| GET    | `/status`                   | System operational status, mode, and cache metadata     |
+| GET    | `/risk`                     | Calculate short-term risk scores for a circular area    |
+| GET    | `/events`                   | Retrieve recent earthquakes from the local cache        |
+| GET    | `/events/<id>/sequence`     | Sequence breakdown, Omori MLE fit, and cluster geometry |
+| GET    | `/faults`                   | Verified active tectonic fault traces GeoJSON           |
+| POST   | `/local-event`              | Add a local event/report and update risk evaluations    |
+| POST   | `/refresh-catalog`          | Download latest catalog from USGS (online only)         |
+| GET    | `/risk/grid`                | Get risk values on a regular grid (for heatmaps)        |
+| POST   | `/forecasts`                | Compute aftershock hazard triggered by a specific event |
 
 ---
 
@@ -506,6 +508,101 @@ To achieve 100% autonomous edge and offline operation in the frontend UI, the fo
 
    Continuous `risk_score` is mapped to $[0.0, 1.0]$ using a calibrated response curve:
    $$\text{risk\_score} = 1.0 - \frac{1.0}{1.0 + (R / 3.5)^{1.2}}$$
+
+---
+
+## 8. Verified Active Tectonic Faults
+
+### `GET /faults` (or `GET /map/faults`)
+
+Returns verified active tectonic fault traces formatted as a GeoJSON `FeatureCollection` for map rendering.
+
+#### Query Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `min_lat` | float | No | None | Southern latitude boundary |
+| `max_lat` | float | No | None | Northern latitude boundary |
+| `min_lon` | float | No | None | Western longitude boundary |
+| `max_lon` | float | No | None | Eastern longitude boundary |
+
+#### Response `200 OK`
+```json
+{
+  "type": "FeatureCollection",
+  "count": 12,
+  "features": [
+    {
+      "type": "Feature",
+      "id": "fault-eafz-pazarcik",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[36.35, 36.65], [36.85, 37.05], [37.25, 37.45], [37.85, 37.95], [38.45, 38.35]]
+      },
+      "properties": {
+        "name": "East Anatolian Fault - Pazarcık & Amanos Segments",
+        "type": "left-lateral strike-slip",
+        "region": "Turkey / Middle East",
+        "slip_rate_mm_yr": 10.0,
+        "confidence": "verified_active",
+        "rupture_history": "2023-02-06 M7.8 Kahramanmaraş mainshock rupture plane"
+      }
+    }
+  ]
+}
+```
+
+---
+
+## 9. Sequence Breakdown & Omori Fit
+
+### `GET /events/<event_id>/sequence`
+
+Evaluates candidate foreshocks and aftershocks surrounding an earthquake, computes PCA rupture strike geometry, fits the modified Omori-Utsu decay law via Maximum Likelihood Estimation (MLE), and calculates inhomogeneous Poisson probabilities.
+
+#### Response `200 OK`
+```json
+{
+  "mainshock": {
+    "id": "turkey-main-1",
+    "lat": 37.174,
+    "lon": 37.032,
+    "magnitude": 7.8,
+    "place": "26 km E of Nurdağı, Turkey",
+    "time": "2023-02-06T01:17:34Z"
+  },
+  "search_radius_km": 350.0,
+  "search_window_days": 180.0,
+  "foreshock_count": 1,
+  "aftershock_count": 14,
+  "confidence": "high",
+  "geometry": {
+    "strike_deg": 42.5,
+    "major_axis_km": 145.2,
+    "minor_axis_km": 38.6,
+    "aspect_ratio": 3.76,
+    "is_elongated": true,
+    "strike_uncertainty_deg": 12.0,
+    "notes": "PCA principal component aligns with known tectonic fault strike"
+  },
+  "omori_fit": {
+    "k": 2.07,
+    "c_days": 0.1205,
+    "p": 1.15,
+    "is_fitted": true,
+    "log_likelihood": 23.32,
+    "method": "maximum_likelihood_estimation",
+    "parameter_uncertainty": {
+      "k": 0.11,
+      "c_days": 0.008,
+      "p": 0.038
+    }
+  },
+  "foreshocks": [],
+  "aftershocks": [],
+  "data_quality_notes": []
+}
+```
 
 ---
 

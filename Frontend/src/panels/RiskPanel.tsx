@@ -1,15 +1,21 @@
-import { useState } from "react";
-import type { RiskResponse } from "../api";
+import { useState, useEffect } from "react";
+import {
+  type RiskResponse,
+  type EarthquakeEvent,
+  type SequenceDetailsResponse,
+  getEventSequence,
+} from "../api";
 
 interface RiskPanelProps {
   riskData: RiskResponse | null;
   isLoading: boolean;
   activeLocationName?: string;
   selectedCoordinates: { lat: number; lon: number } | null;
-  timeWindow: "24h" | "7d";
-  setTimeWindow: (tw: "24h" | "7d") => void;
+  timeWindow: "24h" | "72h" | "7d";
+  setTimeWindow: (tw: "24h" | "72h" | "7d") => void;
   onRecalculate: () => void;
   onOpenSitRep?: () => void;
+  selectedMainshock?: EarthquakeEvent | null;
 }
 
 export default function RiskPanel({
@@ -21,8 +27,37 @@ export default function RiskPanel({
   setTimeWindow,
   onRecalculate,
   onOpenSitRep,
+  selectedMainshock,
 }: RiskPanelProps) {
   const [radiusKm, setRadiusKm] = useState<number>(50);
+  const [sequenceDetails, setSequenceDetails] = useState<SequenceDetailsResponse | null>(null);
+  const [isSeqLoading, setIsSeqLoading] = useState<boolean>(false);
+
+  // Fetch sequence breakdown if mainshock is active
+  useEffect(() => {
+    if (!selectedMainshock) {
+      setSequenceDetails(null);
+      return;
+    }
+    let cancelled = false;
+    setIsSeqLoading(true);
+    getEventSequence(selectedMainshock.id)
+      .then((data) => {
+        if (!cancelled) {
+          setSequenceDetails(data);
+        }
+      })
+      .catch((err) => {
+        console.warn("Sequence breakdown fetch error:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsSeqLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMainshock]);
 
   const primaryZone = riskData?.zones?.[0];
   const riskScore = primaryZone?.risk_score ?? 0;
@@ -156,6 +191,13 @@ export default function RiskPanel({
             </button>
             <button
               type="button"
+              className={`toggle-chip ${timeWindow === "72h" ? "active" : ""}`}
+              onClick={() => setTimeWindow("72h")}
+            >
+              72 Hours
+            </button>
+            <button
+              type="button"
               className={`toggle-chip ${timeWindow === "7d" ? "active" : ""}`}
               onClick={() => setTimeWindow("7d")}
             >
@@ -250,6 +292,62 @@ export default function RiskPanel({
           </span>
         </div>
       </div>
+
+      {/* Sequence Breakdown & Modified Omori-Utsu Model Parameters */}
+      {(selectedMainshock || sequenceDetails) && (
+        <div className="sequence-analysis-card">
+          <div className="sequence-header-row">
+            <h4 className="sequence-title">
+              <span>🔬 Sequence Identification & Omori Law</span>
+            </h4>
+            <span className="count-pill">
+              {isSeqLoading ? "Fitting..." : sequenceDetails?.confidence ? `${sequenceDetails.confidence.toUpperCase()}` : "ACTIVE"}
+            </span>
+          </div>
+
+          {selectedMainshock && (
+            <div className="seq-mainshock-meta font-mono text-xs text-muted">
+              ★ Mainshock: M{selectedMainshock.magnitude} ({selectedMainshock.place || "Epicenter"})
+            </div>
+          )}
+
+          <div className="sequence-stats-grid">
+            <div className="seq-stat-box">
+              <span className="seq-stat-val font-mono">{sequenceDetails?.foreshock_count ?? 0}</span>
+              <span className="seq-stat-lbl">Foreshocks</span>
+            </div>
+            <div className="seq-stat-box">
+              <span className="seq-stat-val font-mono text-purple">{sequenceDetails?.aftershock_count ?? 0}</span>
+              <span className="seq-stat-lbl">Aftershocks</span>
+            </div>
+            <div className="seq-stat-box">
+              <span className="seq-stat-val font-mono text-cyan">
+                {sequenceDetails?.search_radius_km ? `${sequenceDetails.search_radius_km.toFixed(0)} km` : "Adaptive"}
+              </span>
+              <span className="seq-stat-lbl">Search Radius</span>
+            </div>
+          </div>
+
+          <div className="omori-formula-box">
+            <div>r(t) = K / (t + c)^p</div>
+            <div className="omori-param-row">
+              <span>K = {sequenceDetails?.omori_fit?.k?.toFixed(2) ?? "1.85"}</span>
+              <span>c = {sequenceDetails?.omori_fit?.c_days?.toFixed(3) ?? "0.080"} d</span>
+              <span>p = {sequenceDetails?.omori_fit?.p?.toFixed(2) ?? "1.05"}</span>
+            </div>
+            <div className="omori-param-row" style={{ marginTop: "3px", color: "var(--text-dim)" }}>
+              <span>Method: {sequenceDetails?.omori_fit?.method === "maximum_likelihood_estimation" ? "MLE Fitted" : "Regional Prior"}</span>
+              {sequenceDetails?.geometry?.strike_deg !== undefined && (
+                <span>Strike θ: {sequenceDetails.geometry.strike_deg.toFixed(1)}°</span>
+              )}
+            </div>
+          </div>
+
+          <div className="legend-disclaimer">
+            💡 Notice: Decay parameters estimate statistical aftershock frequency under inhomogeneous Poisson assumptions. Not an exact prediction of single event timing.
+          </div>
+        </div>
+      )}
 
       {/* Ranked Emergency Sectors */}
       {guidance?.sectors && guidance.sectors.length > 0 && (
