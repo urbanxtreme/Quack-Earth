@@ -1629,7 +1629,7 @@ export default function MapViewer({
           </div>
 
           {/* Forecast Horizon Window Toggle */}
-          <div className="forecast-window-selector">
+          {/* <div className="forecast-window-selector">
             <span className="scenario-label font-mono">WINDOW:</span>
             {(["24h", "72h", "7d"] as const).map((w) => (
               <button
@@ -1642,10 +1642,10 @@ export default function MapViewer({
                 {w}
               </button>
             ))}
-          </div>
+          </div> */}
 
           {/* Minimum Magnitude Slider */}
-          <div className="mag-toolbar-slider">
+          {/* <div className="mag-toolbar-slider">
             <span className="mag-toolbar-label font-mono">Min Mag:</span>
             <span className="mag-toolbar-val font-mono">M{activeMinMag.toFixed(1)}</span>
             <input
@@ -1658,7 +1658,7 @@ export default function MapViewer({
               className="mag-toolbar-input"
               title={`Filter events and forecast to magnitude >= ${activeMinMag.toFixed(1)}`}
             />
-          </div>
+          </div> */}
 
           {/* Scenario Selector Dropdown */}
           <div className="scenario-selector-group">
