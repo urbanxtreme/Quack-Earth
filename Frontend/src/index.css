@@ -771,7 +771,7 @@ body {
   position: absolute;
   top: 14px;
   left: 14px;
-  right: 14px;
+  right: 50px;
   z-index: 25;
   display: flex;
   align-items: flex-start;
