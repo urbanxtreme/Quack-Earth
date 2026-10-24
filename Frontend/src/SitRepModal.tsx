@@ -113,7 +113,10 @@ export default function SitRepModal({
         {/* Top Action Bar (hidden in print) */}
         <div className="sitrep-toolbar no-print">
           <div className="sitrep-toolbar-left">
-            <span className="sitrep-badge-official">CIVIL DEFENSE SITREP</span>
+            <span className="sitrep-badge-official">
+              <span className="sitrep-radar-dot" />
+              CIVIL DEFENSE SITREP
+            </span>
             <span className="sitrep-timestamp font-mono">{reportTime}</span>
           </div>
           <div className="sitrep-toolbar-right">
@@ -123,7 +126,7 @@ export default function SitRepModal({
             <button type="button" className="btn-geojson-action" onClick={handleExportGeoJSON}>
               🌐 Export GIS GeoJSON
             </button>
-            <button type="button" className="btn-close-modal" onClick={onClose}>
+            <button type="button" className="btn-close-modal" onClick={onClose} aria-label="Close SITREP">
               ✕
             </button>
           </div>
@@ -133,21 +136,39 @@ export default function SitRepModal({
         <div className="sitrep-document">
           <header className="sitrep-doc-header">
             <div className="doc-header-row">
-              <div className="doc-emblem">🛡️</div>
+              <div className="doc-emblem-wrap">
+                <span className="doc-emblem">🛡️</span>
+              </div>
               <div className="doc-titles">
+                <span className="doc-kicker font-mono">INCIDENT COMMAND BRIEFING</span>
                 <h1 className="doc-main-title">EMERGENCY SITUATION REPORT (SITREP)</h1>
                 <p className="doc-sub-title">DIRECTORATE OF CIVIL PROTECTION & SEISMIC HAZARD RESPONSE</p>
               </div>
-              <div className={`doc-zone-stamp zone-${peakZone}`}>
-                <span className="stamp-label">DEFENSE ZONE</span>
+              <div className={`doc-zone-stamp zone-${peakZone.toLowerCase()}`}>
+                <span className="stamp-label font-mono">DEFENSE ZONE</span>
                 <span className="stamp-val font-mono">{peakZone.toUpperCase()}</span>
               </div>
             </div>
-            <div className="doc-meta-grid font-mono">
-              <div><strong>TARGET SECTOR:</strong> {locationName}</div>
-              <div><strong>COORDINATES:</strong> {coordinates ? `${coordinates.lat.toFixed(4)}°N, ${coordinates.lon.toFixed(4)}°E` : "N/A"}</div>
-              <div><strong>TIME HORIZON:</strong> 24-Hour Predictive Window</div>
-              <div><strong>DATE/TIME:</strong> {reportTime}</div>
+
+            <div className="doc-meta-grid">
+              <div className="doc-meta-item">
+                <span className="meta-item-label font-mono">TARGET SECTOR</span>
+                <span className="meta-item-val">{locationName}</span>
+              </div>
+              <div className="doc-meta-item">
+                <span className="meta-item-label font-mono">COORDINATES</span>
+                <span className="meta-item-val font-mono">
+                  {coordinates ? `${coordinates.lat.toFixed(4)}°N, ${coordinates.lon.toFixed(4)}°E` : "N/A"}
+                </span>
+              </div>
+              <div className="doc-meta-item">
+                <span className="meta-item-label font-mono">TIME HORIZON</span>
+                <span className="meta-item-val font-mono">24-Hour Predictive Window</span>
+              </div>
+              <div className="doc-meta-item">
+                <span className="meta-item-label font-mono">GENERATED (UTC)</span>
+                <span className="meta-item-val font-mono">{reportTime}</span>
+              </div>
             </div>
           </header>
 
@@ -155,18 +176,27 @@ export default function SitRepModal({
 
           {/* Commander Situation Verdict Section */}
           <section className="sitrep-section">
-            <h2 className="section-heading">1. COMMANDER SITUATION BRIEFING & DIRECTIVE</h2>
-            <div className={`sitrep-verdict-box zone-${peakZone}`}>
+            <h2 className="section-heading">
+              <span className="section-num font-mono">01</span>
+              COMMANDER SITUATION BRIEFING & DIRECTIVE
+            </h2>
+            <div className={`sitrep-verdict-box zone-${peakZone.toLowerCase()}`}>
               <p className="verdict-lead-text">{verdictText}</p>
               <div className="verdict-limit-note">
-                ⚠️ <em>Authority Note: This is an empirical probabilistic forecast for the next 24 hours. A local field incident commander decides all binding evacuation orders.</em>
+                <span className="verdict-note-icon">⚠️</span>
+                <span className="verdict-note-text font-mono">
+                  Authority Note: This is an empirical probabilistic forecast for the next 24 hours. A local field incident commander decides all binding evacuation orders.
+                </span>
               </div>
             </div>
           </section>
 
           {/* Quantitative Probabilities */}
           <section className="sitrep-section">
-            <h2 className="section-heading">2. SEISMIC HAZARD QUANTIFICATION</h2>
+            <h2 className="section-heading">
+              <span className="section-num font-mono">02</span>
+              SEISMIC HAZARD QUANTIFICATION
+            </h2>
             <div className="sitrep-stats-grid">
               <div className="stat-card">
                 <span className="stat-label">24h Aftershock Chance (M4+)</span>
@@ -182,7 +212,7 @@ export default function SitRepModal({
               </div>
               <div className="stat-card">
                 <span className="stat-label">Excavation Safety Protocol</span>
-                <span className={`stat-value font-mono action-${excavationAction}`}>
+                <span className={`stat-value font-mono action-${excavationAction.toLowerCase().replace(/\s+/g, '-')}`}>
                   {excavationAction.toUpperCase()}
                 </span>
               </div>
@@ -192,76 +222,95 @@ export default function SitRepModal({
           {/* Sector Breakdown */}
           {sectors.length > 0 && (
             <section className="sitrep-section">
-              <h2 className="section-heading">3. RANKED EMERGENCY SECTOR ASSESSMENTS</h2>
-              <table className="sitrep-table">
-                <thead>
-                  <tr>
-                    <th>Sector Location</th>
-                    <th>Zone</th>
-                    <th>24h P(M4+)</th>
-                    <th>Excavation Directive</th>
-                    <th>Field Operational Advice</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sectors.map((sec, idx) => (
-                    <tr key={idx} className={`row-zone-${sec.public_zone}`}>
-                      <td className="font-mono">
-                        <strong>{sec.place}</strong> ({sec.lat.toFixed(2)}°, {sec.lon.toFixed(2)}°)
-                      </td>
-                      <td>
-                        <span className={`pill-zone zone-${sec.public_zone}`}>{sec.public_zone}</span>
-                      </td>
-                      <td className="font-mono">{(sec.probability_24h * 100).toFixed(1)}%</td>
-                      <td className="font-mono font-bold">{sec.excavation.toUpperCase()}</td>
-                      <td>{sec.action}</td>
+              <h2 className="section-heading">
+                <span className="section-num font-mono">03</span>
+                RANKED EMERGENCY SECTOR ASSESSMENTS
+              </h2>
+              <div className="sitrep-table-wrapper">
+                <table className="sitrep-table">
+                  <thead>
+                    <tr>
+                      <th>Sector Location</th>
+                      <th>Zone</th>
+                      <th>24h P(M4+)</th>
+                      <th>Excavation Directive</th>
+                      <th>Field Operational Advice</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {sectors.map((sec, idx) => (
+                      <tr key={idx} className={`row-zone-${sec.public_zone.toLowerCase()}`}>
+                        <td className="font-mono">
+                          <strong>{sec.place}</strong> <span className="text-dim">({sec.lat.toFixed(2)}°, {sec.lon.toFixed(2)}°)</span>
+                        </td>
+                        <td>
+                          <span className={`pill-zone zone-${sec.public_zone.toLowerCase()}`}>{sec.public_zone.toUpperCase()}</span>
+                        </td>
+                        <td className="font-mono font-bold">{(sec.probability_24h * 100).toFixed(1)}%</td>
+                        <td>
+                          <span className={`pill-excavation action-${sec.excavation.toLowerCase().replace(/\s+/g, '-')}`}>
+                            {sec.excavation.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="sector-advice-cell">{sec.action}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
           )}
 
           {/* Recent Quakes Log */}
           <section className="sitrep-section">
-            <h2 className="section-heading">4. KEY RECENT SHOCKS & SENSOR CORROBORATION</h2>
-            <table className="sitrep-table">
-              <thead>
-                <tr>
-                  <th>Origin (UTC)</th>
-                  <th>Magnitude</th>
-                  <th>Depth</th>
-                  <th>Place / Description</th>
-                  <th>Corroboration</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.slice(0, 6).map((ev) => (
-                  <tr key={ev.id}>
-                    <td className="font-mono text-sm">{new Date(ev.time).toISOString().replace("T", " ").slice(0, 19)}</td>
-                    <td className="font-mono font-bold text-orange">M {ev.magnitude.toFixed(1)}</td>
-                    <td className="font-mono">{ev.depth_km !== undefined ? `${ev.depth_km.toFixed(1)} km` : "N/A"}</td>
-                    <td>{ev.place || `Near ${ev.lat.toFixed(2)}°, ${ev.lon.toFixed(2)}°`}</td>
-                    <td>
-                      <span className={`status-tag tag-${ev.corroboration?.status || "usgs"}`}>
-                        {ev.corroboration?.label || "USGS ComCat"}
-                      </span>
-                    </td>
+            <h2 className="section-heading">
+              <span className="section-num font-mono">04</span>
+              KEY RECENT SHOCKS & SENSOR CORROBORATION
+            </h2>
+            <div className="sitrep-table-wrapper">
+              <table className="sitrep-table">
+                <thead>
+                  <tr>
+                    <th>Origin (UTC)</th>
+                    <th>Magnitude</th>
+                    <th>Depth</th>
+                    <th>Place / Description</th>
+                    <th>Corroboration</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {events.slice(0, 6).map((ev) => (
+                    <tr key={ev.id}>
+                      <td className="font-mono text-sm">{new Date(ev.time).toISOString().replace("T", " ").slice(0, 19)}</td>
+                      <td>
+                        <span className="sitrep-mag-badge font-mono font-bold">M {ev.magnitude.toFixed(1)}</span>
+                      </td>
+                      <td className="font-mono">{ev.depth_km !== undefined ? `${ev.depth_km.toFixed(1)} km` : "N/A"}</td>
+                      <td>{ev.place || `Near ${ev.lat.toFixed(2)}°, ${ev.lon.toFixed(2)}°`}</td>
+                      <td>
+                        <span className={`status-tag tag-${ev.corroboration?.status || "usgs"}`}>
+                          {ev.corroboration?.label || "USGS ComCat"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           {/* Official Sign-off Footer */}
           <footer className="sitrep-doc-footer">
             <div className="footer-sig-box">
               <div className="sig-line" />
-              <span>CIVIL DEFENSE COMMAND OFFICER</span>
+              <span className="sig-title font-mono">CIVIL DEFENSE COMMAND OFFICER</span>
             </div>
             <div className="footer-doc-info font-mono">
-              <span>QUACK-EARTH-SYSTEM-V1</span>
-              <span>VERIFIED REALTIME CALIBRATION</span>
+              <span className="sys-ver">QUACK-EARTH-SYSTEM-V1</span>
+              <span className="sys-status">
+                <span className="verified-dot" />
+                VERIFIED REALTIME CALIBRATION
+              </span>
             </div>
           </footer>
         </div>
