@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import type { EarthquakeEvent } from "../api";
-import { shockLabel, shockRole } from "../shockRole";
+import { impactSequence, shockLabel, shockRole } from "../shockRole";
 
 interface EventsPanelProps {
   events: EarthquakeEvent[];
@@ -24,6 +24,8 @@ export default function EventsPanel({
   setMinMagnitude,
 }: EventsPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const sequence = useMemo(() => impactSequence(events), [events]);
+  const sequenceIds = useMemo(() => new Set(sequence.map((event) => event.id)), [sequence]);
 
   const filteredEvents = useMemo(() => {
     return events.filter((e) => {
@@ -71,13 +73,13 @@ export default function EventsPanel({
         <p className="panel-subtitle">Catalog of cached USGS and simulation sequences</p>
       </div>
 
-      {events.length > 1 && (
+      {sequence.length > 0 && (
         <p className="sequence-count-line font-mono">
-          {events.filter((event) => shockRole(event, events) === "mainshock").length} mainshock
+          {sequence.filter((event) => shockRole(event, sequence) === "mainshock").length} mainshock
           {" · "}
-          {events.filter((event) => shockRole(event, events) === "aftershock").length} aftershocks
-          {events.some((event) => shockRole(event, events) === "foreshock")
-            ? ` · ${events.filter((event) => shockRole(event, events) === "foreshock").length} foreshock`
+          {sequence.filter((event) => shockRole(event, sequence) === "aftershock").length} aftershocks
+          {sequence.some((event) => shockRole(event, sequence) === "foreshock")
+            ? ` · ${sequence.filter((event) => shockRole(event, sequence) === "foreshock").length} foreshock`
             : ""}
         </p>
       )}
@@ -167,7 +169,7 @@ export default function EventsPanel({
             {filteredEvents.map((event) => {
               const isSelected = selectedEventId === event.id;
               const magClass = getMagColorClass(event.magnitude);
-              const role = shockRole(event, events);
+              const role = sequenceIds.has(event.id) ? shockRole(event, sequence) : null;
 
               return (
                 <li
@@ -204,7 +206,7 @@ export default function EventsPanel({
                       <span className={`source-pill ${event.source === "user_report" ? "pill-user" : "pill-usgs"}`}>
                         {event.source === "user_report" ? "Local" : "USGS"}
                       </span>
-                      <span className={`shock-role-pill role-${role}`}>{shockLabel(role)}</span>
+                      {role && <span className={`shock-role-pill role-${role}`}>{shockLabel(role)}</span>}
                     </div>
 
                     <div className="corroboration-tag-row">

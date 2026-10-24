@@ -6,7 +6,7 @@ import { layers, namedFlavor } from "@protomaps/basemaps";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import type { FeatureCollection, Point } from "geojson";
 import type { EarthquakeEvent } from "./api";
-import { shockLabel, shockRole } from "./shockRole";
+import { impactSequence, shockLabel, shockRole } from "./shockRole";
 
 // Configure MapLibre Web Worker for Vite
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
@@ -185,9 +185,12 @@ export default function MapViewer({
   catalogEventsRef.current = events;
 
   const isSimulation = activeScenarioId !== "live_usgs";
+  const sequence = useMemo(() => impactSequence(events), [events]);
+  const sequenceRef = useRef(sequence);
+  sequenceRef.current = sequence;
   const aftershockCount = useMemo(
-    () => events.filter((event) => shockRole(event, events) === "aftershock").length,
-    [events],
+    () => sequence.filter((event) => shockRole(event, sequence) === "aftershock").length,
+    [sequence],
   );
 
   // Automated playback timer
@@ -344,8 +347,11 @@ export default function MapViewer({
         if (foundEvent && onSelectEvent) {
           onSelectEvent(foundEvent);
         }
-        const role = foundEvent ? shockRole(foundEvent, catalogEventsRef.current) : "mainshock";
-        const roleName = shockLabel(role);
+        const family = impactSequence(catalogEventsRef.current);
+        const role = foundEvent && family.some((event) => event.id === foundEvent.id)
+          ? shockRole(foundEvent, family)
+          : null;
+        const roleName = role ? shockLabel(role) : props.source === "user_report" ? "Local report" : "Earthquake";
 
         new maplibregl.Popup({ offset: 15 })
           .setLngLat([coords[0], coords[1]])
@@ -355,7 +361,7 @@ export default function MapViewer({
               <p>${props.place}</p>
               <p><strong>Depth:</strong> ${props.depth} km</p>
               <p><strong>Time:</strong> ${new Date(props.time).toLocaleString()}</p>
-              <span class="popup-tag ${role}-tag">${roleName}</span>
+              <span class="popup-tag ${role ? `${role}-tag` : ""}">${roleName}</span>
             </div>`
           )
           .addTo(map);
@@ -671,31 +677,34 @@ export default function MapViewer({
     setTimelinePercent((prev) => (prev < needed ? needed : prev));
   }, [selectedEvent, sortedEvents]);
 
-  // Frame the whole simulation sequence once, so later aftershocks are inside the view.
-  const sequenceKey = isSimulation ? events.map((event) => event.id).join("|") : "";
+  // Frame the impact sequence, including a live USGS sequence, so its aftershocks are in view.
+  const sequenceKey = sequence.map((event) => event.id).sort().join("|");
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapLoaded || !sequenceKey) return;
+    const family = sequenceRef.current;
+    if (!map || !mapLoaded || !sequenceKey || family.length === 0) return;
     const bounds = new maplibregl.LngLatBounds();
-    events.forEach((event) => bounds.extend([event.lon, event.lat]));
+    family.forEach((event) => bounds.extend([event.lon, event.lat]));
     if (bounds.isEmpty()) return;
     map.fitBounds(bounds, { padding: 90, maxZoom: 8, duration: 800 });
-  }, [sequenceKey, mapLoaded, events]);
+  }, [sequenceKey, mapLoaded]);
 
   // Draw one labeled marker per shock in a simulation. The selected aftershock stays open.
   useEffect(() => {
     const map = mapRef.current;
     shockMarkersRef.current.forEach((marker) => marker.remove());
     shockMarkersRef.current = [];
-    if (!map || !mapLoaded || !isSimulation) return;
+    if (!map || !mapLoaded || sequence.length === 0) return;
 
-    const visible = [...displayedEvents];
-    if (selectedEvent && !visible.some((event) => event.id === selectedEvent.id)) {
+    const sequenceIds = new Set(sequence.map((event) => event.id));
+    const visible = displayedEvents.filter((event) => sequenceIds.has(event.id));
+    if (selectedEvent && sequenceIds.has(selectedEvent.id) && !visible.some((event) => event.id === selectedEvent.id)) {
       visible.push(selectedEvent);
     }
 
+    const placeLabel = isSimulation ? "in this simulation" : "in the live feed";
     visible.forEach((event) => {
-      const role = shockRole(event, events);
+      const role = shockRole(event, sequence);
       const selected = selectedEvent?.id === event.id;
       const button = document.createElement("button");
       button.type = "button";
@@ -714,7 +723,7 @@ export default function MapViewer({
           <h4>${shockLabel(role)} M${event.magnitude.toFixed(1)}</h4>
           <p>${event.place || "Simulation sequence"}</p>
           <p><strong>Time:</strong> ${new Date(event.time).toLocaleString()}</p>
-          <span class="popup-tag ${role}-tag">${shockLabel(role)} in this simulation</span>
+          <span class="popup-tag ${role}-tag">${shockLabel(role)} ${placeLabel}</span>
         </div>`
       );
       const marker = new maplibregl.Marker({ element: button, anchor: "center" })
@@ -724,7 +733,7 @@ export default function MapViewer({
       if (selected) marker.togglePopup();
       shockMarkersRef.current.push(marker);
     });
-  }, [displayedEvents, selectedEvent, mapLoaded, isSimulation, events]);
+  }, [displayedEvents, selectedEvent, mapLoaded, isSimulation, sequence]);
 
   const lastFlownEventId = useRef<string | null>(null);
   useEffect(() => {
@@ -753,7 +762,7 @@ export default function MapViewer({
   useEffect(() => {
     if (targetCoords && mapRef.current) {
       const coveredByShock =
-        isSimulation &&
+        sequence.length > 0 &&
         selectedEvent &&
         Math.abs(selectedEvent.lat - targetCoords.lat) < 0.02 &&
         Math.abs(selectedEvent.lon - targetCoords.lon) < 0.02;
@@ -1179,7 +1188,7 @@ export default function MapViewer({
           <div className="timeline-dock-center">
             <span className="timeline-shock-badge font-mono">
               ⚡ <strong className="text-cyan">{displayedEvents.length}</strong> of {sortedEvents.length} shocks
-              {isSimulation && (
+              {sequence.length > 0 && (
                 <span className="timeline-pct-tag">{aftershockCount} aftershocks in this sequence</span>
               )}
               <span className="timeline-pct-tag">({timelinePercent.toFixed(0)}%)</span>

@@ -1,0 +1,246 @@
+- main [ref=f1e3]:
+  - generic [ref=f1e4]:
+    - generic [ref=f1e5]:
+      - generic [ref=f1e6]:
+        - button "←" [ref=f1e7] [cursor=pointer]
+        - generic [ref=f1e8]:
+          - generic [ref=f1e9]: 🌍
+          - generic [ref=f1e10]:
+            - generic [ref=f1e11]:
+              - heading "QUACK EARTH" [level=1] [ref=f1e12]
+              - generic [ref=f1e13]: EDGE-V1
+            - paragraph [ref=f1e14]: Seismic Hazard & Risk Anticipation Engine
+      - generic [ref=f1e15]:
+        - generic [ref=f1e16]: "INCIDENT:"
+        - combobox "Switch between live USGS feed and critical disaster simulation scenarios" [ref=f1e17] [cursor=pointer]:
+          - option "Live USGS Feed (REALTIME FEED)"
+          - option "Turkey M7.8 Doublet (CIVIL DEFENSE PRIORITY)" [selected]
+          - option "Tokyo Urban Drill (URBAN DEFENSE DRILL)"
+          - option "Ridgecrest M7.1 (CONJUGATE FAULT RUPTURE)"
+      - generic [ref=f1e18]:
+        - generic [ref=f1e19]:
+          - generic [ref=f1e21]: "Mode:"
+          - generic [ref=f1e22]: SCENARIO REPLAY
+        - generic [ref=f1e23]:
+          - generic [ref=f1e24]: "Active Events:"
+          - generic [ref=f1e25]: "7"
+        - generic [ref=f1e130]:
+          - generic [ref=f1e131]: "Peak:"
+          - generic [ref=f1e132]: M 7.8
+        - button "📋 SitRep Briefing" [ref=f1e26] [cursor=pointer]
+      - navigation [ref=f1e27]:
+        - button "🗺️ Map" [ref=f1e28] [cursor=pointer]:
+          - generic [ref=f1e29]: 🗺️
+          - generic [ref=f1e30]: Map
+        - button "⚡ Events 7" [ref=f1e133] [cursor=pointer]:
+          - generic [ref=f1e32]: ⚡
+          - generic [ref=f1e33]: Events
+          - generic [ref=f1e134]: "7"
+        - button "📊 Risk Anticipation" [ref=f1e34] [cursor=pointer]:
+          - generic [ref=f1e35]: 📊
+          - generic [ref=f1e36]: Risk Anticipation
+        - button "📝 Report" [ref=f1e37] [cursor=pointer]:
+          - generic [ref=f1e38]: 📝
+          - generic [ref=f1e39]: Report
+        - button "⚙️ Status" [ref=f1e40] [cursor=pointer]:
+          - generic [ref=f1e41]: ⚙️
+          - generic [ref=f1e42]: Status
+      - button "Hide Panel ❯" [ref=f1e43] [cursor=pointer]
+    - generic [ref=f1e45]:
+      - generic [ref=f1e47]:
+        - generic:
+          - generic [ref=f1e50]:
+            - generic [ref=f1e51]: 🔍
+            - textbox "Enter place name (e.g. Turkey, San Francisco, Kochi)..." [ref=f1e52]
+            - button "Center Heatmap" [disabled] [ref=f1e53]
+          - generic [ref=f1e55]:
+            - generic [ref=f1e56]:
+              - button "🔥 Heatmap" [ref=f1e57] [cursor=pointer]
+              - button "⚡ Events (7)" [ref=f1e135] [cursor=pointer]
+            - generic [ref=f1e59]:
+              - button "Light" [ref=f1e60] [cursor=pointer]
+              - button "Dark" [ref=f1e61] [cursor=pointer]
+              - button "Mono" [ref=f1e62] [cursor=pointer]
+            - button "Reset View" [ref=f1e63] [cursor=pointer]
+            - button "↻ Sync USGS" [ref=f1e64] [cursor=pointer]
+        - generic [ref=f1e65]:
+          - generic [ref=f1e66]:
+            - generic [ref=f1e67]:
+              - button "▶ Play Sequence" [ref=f1e68] [cursor=pointer]
+              - button "↺ Latest" [ref=f1e69] [cursor=pointer]
+            - generic [ref=f1e71]:
+              - text: ⚡
+              - strong [ref=f1e72]: "7"
+              - text: of 7 shocks
+              - generic [ref=f1e136]: 5 aftershocks in this sequence
+              - generic [ref=f1e73]: (100%)
+            - generic [ref=f1e74]:
+              - generic [ref=f1e75]: 20.32°N, 0.62°E
+              - generic [ref=f1e76]: z2.5
+              - generic "Click anywhere on the map to evaluate site-specific seismic hazard" [ref=f1e77]: 💡 Click map for risk
+          - generic [ref=f1e79]:
+            - generic [ref=f1e80]: T-0 (Sequence Start)
+            - 'slider "Timeline sequence position: 100%" [ref=f1e82] [cursor=pointer]': "100"
+            - generic [ref=f1e83]: Latest (100%)
+        - generic [ref=f1e86]:
+          - generic [ref=f1e87]:
+            - region "Map" [ref=f1e88]
+            - button "Mainshock magnitude 7.8" [ref=f1e137] [cursor=pointer]:
+              - generic [ref=f1e138]: "7.8"
+            - button "Aftershock magnitude 6.7" [ref=f1e139] [cursor=pointer]:
+              - generic [ref=f1e140]: "6.7"
+            - button "Aftershock magnitude 6.0" [ref=f1e141] [cursor=pointer]:
+              - generic [ref=f1e142]: "6.0"
+            - button "Aftershock magnitude 5.4" [ref=f1e143] [cursor=pointer]:
+              - generic [ref=f1e144]: "5.4"
+            - button "Mainshock magnitude 7.5" [ref=f1e145] [cursor=pointer]:
+              - generic [ref=f1e146]: "7.5"
+            - button "Aftershock magnitude 6.0" [ref=f1e147] [cursor=pointer]:
+              - generic [ref=f1e148]: "6.0"
+            - button "Aftershock magnitude 5.8" [ref=f1e149] [cursor=pointer]:
+              - generic [ref=f1e150]: "5.8"
+          - generic:
+            - generic [ref=f1e89]:
+              - button "Zoom in" [ref=f1e90] [cursor=pointer]
+              - button "Zoom out" [ref=f1e92] [cursor=pointer]
+              - button "Drag to rotate map, click to reset north" [ref=f1e94]
+            - generic: 1000 km
+            - group [ref=f1e151]:
+              - generic "Toggle attribution" [ref=f1e152] [cursor=pointer]
+              - generic [ref=f1e153]:
+                - link "Protomaps" [ref=f1e154] [cursor=pointer]:
+                  - /url: https://protomaps.com
+                - text: ©
+                - link "OpenStreetMap" [ref=f1e155] [cursor=pointer]:
+                  - /url: https://openstreetmap.org/copyright
+          - generic [ref=f1e156]:
+            - generic [ref=f1e157]:
+              - heading "Mainshock M7.8" [level=4] [ref=f1e158]
+              - paragraph [ref=f1e159]: 26 km E of Nurdağı, Turkey
+              - paragraph [ref=f1e160]:
+                - strong [ref=f1e161]: "Time:"
+                - text: 2/6/2023, 6:47:34 AM
+              - generic [ref=f1e162]: Mainshock in this simulation
+            - button "Close popup" [active] [ref=f1e163] [cursor=pointer]: ×
+      - complementary [ref=f1e97]:
+        - generic [ref=f1e99]:
+          - generic [ref=f1e100]:
+            - generic [ref=f1e101]:
+              - generic [ref=f1e102]: ⚡
+              - heading "Seismic Events" [level=2] [ref=f1e103]
+              - generic [ref=f1e104]: "7"
+            - paragraph [ref=f1e105]: Catalog of cached USGS and simulation sequences
+          - paragraph [ref=f1e164]: 2 mainshock · 5 aftershocks
+          - generic [ref=f1e106]:
+            - generic [ref=f1e107]:
+              - text: Time Window
+              - generic [ref=f1e108]:
+                - button "24h" [ref=f1e109] [cursor=pointer]
+                - button "48h" [ref=f1e110] [cursor=pointer]
+                - button "72h" [ref=f1e111] [cursor=pointer]
+                - button "7d" [ref=f1e112] [cursor=pointer]
+            - generic [ref=f1e113]:
+              - generic [ref=f1e114]:
+                - generic [ref=f1e115]: Min Magnitude
+                - generic [ref=f1e116]: M 3.0+
+              - slider [ref=f1e117] [cursor=pointer]: "3"
+              - generic [ref=f1e118]:
+                - generic [ref=f1e119]: "2.0"
+                - generic [ref=f1e120]: "3.5"
+                - generic [ref=f1e121]: "5.0"
+                - generic [ref=f1e122]: "7.0"
+            - generic [ref=f1e123]:
+              - generic [ref=f1e124]: 🔎
+              - textbox "Filter by location, ID, or source..." [ref=f1e125]
+          - list [ref=f1e165]:
+            - 'button "M 7.8 26 km E of Nurdağı, Turkey 1356d ago Depth: 17.9 km USGS Mainshock ✓ USGS Verified →" [ref=f1e166] [cursor=pointer]':
+              - generic [ref=f1e167]:
+                - generic [ref=f1e168]: M
+                - generic [ref=f1e169]: "7.8"
+              - generic [ref=f1e170]:
+                - generic [ref=f1e171]: 26 km E of Nurdağı, Turkey
+                - generic [ref=f1e172]:
+                  - generic [ref=f1e173]: 1356d ago
+                  - generic [ref=f1e174]: "Depth: 17.9 km"
+                  - generic [ref=f1e175]: USGS
+                  - generic [ref=f1e176]: Mainshock
+                - generic [ref=f1e177]: ✓ USGS Verified
+              - generic [ref=f1e178]: →
+            - 'button "M 7.5 4 km SSE of Ekinözü, Turkey 1355d ago Depth: 10.0 km USGS Mainshock ✓ USGS Verified →" [ref=f1e179] [cursor=pointer]':
+              - generic [ref=f1e180]:
+                - generic [ref=f1e181]: M
+                - generic [ref=f1e182]: "7.5"
+              - generic [ref=f1e183]:
+                - generic [ref=f1e184]: 4 km SSE of Ekinözü, Turkey
+                - generic [ref=f1e185]:
+                  - generic [ref=f1e186]: 1355d ago
+                  - generic [ref=f1e187]: "Depth: 10.0 km"
+                  - generic [ref=f1e188]: USGS
+                  - generic [ref=f1e189]: Mainshock
+                - generic [ref=f1e190]: ✓ USGS Verified
+              - generic [ref=f1e191]: →
+            - 'button "M 6.7 18 km ESE of Nurdağı, Turkey 1356d ago Depth: 14.5 km USGS Aftershock ✓ USGS Verified →" [ref=f1e192] [cursor=pointer]':
+              - generic [ref=f1e193]:
+                - generic [ref=f1e194]: M
+                - generic [ref=f1e195]: "6.7"
+              - generic [ref=f1e196]:
+                - generic [ref=f1e197]: 18 km ESE of Nurdağı, Turkey
+                - generic [ref=f1e198]:
+                  - generic [ref=f1e199]: 1356d ago
+                  - generic [ref=f1e200]: "Depth: 14.5 km"
+                  - generic [ref=f1e201]: USGS
+                  - generic [ref=f1e202]: Aftershock
+                - generic [ref=f1e203]: ✓ USGS Verified
+              - generic [ref=f1e204]: →
+            - 'button "M 6.0 Gaziantep sector, Turkey 1356d ago Depth: 10.0 km USGS Aftershock ✓ USGS Verified →" [ref=f1e205] [cursor=pointer]':
+              - generic [ref=f1e206]:
+                - generic [ref=f1e207]: M
+                - generic [ref=f1e208]: "6.0"
+              - generic [ref=f1e209]:
+                - generic [ref=f1e210]: Gaziantep sector, Turkey
+                - generic [ref=f1e211]:
+                  - generic [ref=f1e212]: 1356d ago
+                  - generic [ref=f1e213]: "Depth: 10.0 km"
+                  - generic [ref=f1e214]: USGS
+                  - generic [ref=f1e215]: Aftershock
+                - generic [ref=f1e216]: ✓ USGS Verified
+              - generic [ref=f1e217]: →
+            - 'button "M 5.4 Kahramanmaraş Search & Rescue Sector 1 1356d ago Depth: 8.0 km Local Aftershock ⚡ Corroborated Sensor →" [ref=f1e218] [cursor=pointer]':
+              - generic [ref=f1e219]:
+                - generic [ref=f1e220]: M
+                - generic [ref=f1e221]: "5.4"
+              - generic [ref=f1e222]:
+                - generic [ref=f1e223]: Kahramanmaraş Search & Rescue Sector 1
+                - generic [ref=f1e224]:
+                  - generic [ref=f1e225]: 1356d ago
+                  - generic [ref=f1e226]: "Depth: 8.0 km"
+                  - generic [ref=f1e227]: Local
+                  - generic [ref=f1e228]: Aftershock
+                - generic [ref=f1e229]: ⚡ Corroborated Sensor
+              - generic [ref=f1e230]: →
+            - 'button "M 6.0 Malatya boundary, Turkey 1355d ago Depth: 10.0 km USGS Aftershock ✓ USGS Verified →" [ref=f1e231] [cursor=pointer]':
+              - generic [ref=f1e232]:
+                - generic [ref=f1e233]: M
+                - generic [ref=f1e234]: "6.0"
+              - generic [ref=f1e235]:
+                - generic [ref=f1e236]: Malatya boundary, Turkey
+                - generic [ref=f1e237]:
+                  - generic [ref=f1e238]: 1355d ago
+                  - generic [ref=f1e239]: "Depth: 10.0 km"
+                  - generic [ref=f1e240]: USGS
+                  - generic [ref=f1e241]: Aftershock
+                - generic [ref=f1e242]: ✓ USGS Verified
+              - generic [ref=f1e243]: →
+            - 'button "M 5.8 Göksun sector, Turkey 1355d ago Depth: 12.0 km USGS Aftershock ✓ USGS Verified →" [ref=f1e244] [cursor=pointer]':
+              - generic [ref=f1e245]:
+                - generic [ref=f1e246]: M
+                - generic [ref=f1e247]: "5.8"
+              - generic [ref=f1e248]:
+                - generic [ref=f1e249]: Göksun sector, Turkey
+                - generic [ref=f1e250]:
+                  - generic [ref=f1e251]: 1355d ago
+                  - generic [ref=f1e252]: "Depth: 12.0 km"
+                  - generic [ref=f1e253]: USGS
+                  - generic [ref=f1e254]: Aftershock
+                - generic [ref=f1e255]: ✓ USGS Verified
+              - generic [ref=f1e256]: →

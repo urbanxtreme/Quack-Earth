@@ -1,0 +1,118 @@
+- main [ref=f1e3]:
+  - generic [ref=f1e4]:
+    - generic [ref=f1e5]:
+      - generic [ref=f1e6]:
+        - button "←" [ref=f1e7] [cursor=pointer]
+        - generic [ref=f1e8]:
+          - generic [ref=f1e9]: 🌍
+          - generic [ref=f1e10]:
+            - generic [ref=f1e11]:
+              - heading "QUACK EARTH" [level=1] [ref=f1e12]
+              - generic [ref=f1e13]: EDGE-V1
+            - paragraph [ref=f1e14]: Seismic Hazard & Risk Anticipation Engine
+      - generic [ref=f1e15]:
+        - generic [ref=f1e16]: "INCIDENT:"
+        - combobox "Switch between live USGS feed and critical disaster simulation scenarios" [ref=f1e17] [cursor=pointer]:
+          - option "Live USGS Feed (REALTIME FEED)" [selected]
+          - option "Turkey M7.8 Doublet (CIVIL DEFENSE PRIORITY)"
+          - option "Tokyo Urban Drill (URBAN DEFENSE DRILL)"
+          - option "Ridgecrest M7.1 (CONJUGATE FAULT RUPTURE)"
+      - generic [ref=f1e18]:
+        - generic [ref=f1e19]:
+          - generic [ref=f1e21]: "Mode:"
+          - generic [ref=f1e22]: OFFLINE EDGE
+        - generic [ref=f1e23]:
+          - generic [ref=f1e24]: "Active Events:"
+          - generic [ref=f1e25]: "0"
+        - button "📋 SitRep Briefing" [ref=f1e26] [cursor=pointer]
+      - navigation [ref=f1e27]:
+        - button "🗺️ Map" [ref=f1e28] [cursor=pointer]:
+          - generic [ref=f1e29]: 🗺️
+          - generic [ref=f1e30]: Map
+        - button "⚡ Events" [ref=f1e31] [cursor=pointer]:
+          - generic [ref=f1e32]: ⚡
+          - generic [ref=f1e33]: Events
+        - button "📊 Risk Anticipation" [ref=f1e34] [cursor=pointer]:
+          - generic [ref=f1e35]: 📊
+          - generic [ref=f1e36]: Risk Anticipation
+        - button "📝 Report" [ref=f1e37] [cursor=pointer]:
+          - generic [ref=f1e38]: 📝
+          - generic [ref=f1e39]: Report
+        - button "⚙️ Status" [ref=f1e40] [cursor=pointer]:
+          - generic [ref=f1e41]: ⚙️
+          - generic [ref=f1e42]: Status
+      - button "Hide Panel ❯" [ref=f1e43] [cursor=pointer]
+    - generic [ref=f1e45]:
+      - generic [ref=f1e47]:
+        - generic:
+          - generic [ref=f1e50]:
+            - generic [ref=f1e51]: 🔍
+            - textbox "Enter place name (e.g. Turkey, San Francisco, Kochi)..." [ref=f1e52]
+            - button "Center Heatmap" [disabled] [ref=f1e53]
+          - generic [ref=f1e55]:
+            - generic [ref=f1e56]:
+              - button "🔥 Heatmap" [ref=f1e57] [cursor=pointer]
+              - button "⚡ Events (0)" [ref=f1e58] [cursor=pointer]
+            - generic [ref=f1e59]:
+              - button "Light" [ref=f1e60] [cursor=pointer]
+              - button "Dark" [ref=f1e61] [cursor=pointer]
+              - button "Mono" [ref=f1e62] [cursor=pointer]
+            - button "Reset View" [ref=f1e63] [cursor=pointer]
+            - button "↻ Sync USGS" [ref=f1e64] [cursor=pointer]
+        - generic [ref=f1e65]:
+          - generic [ref=f1e66]:
+            - generic [ref=f1e67]:
+              - button "▶ Play Sequence" [ref=f1e68] [cursor=pointer]
+              - button "↺ Latest" [ref=f1e69] [cursor=pointer]
+            - generic [ref=f1e71]:
+              - text: ⚡
+              - strong [ref=f1e72]: "0"
+              - text: of 0 shocks
+              - generic [ref=f1e73]: (100%)
+            - generic [ref=f1e74]:
+              - generic [ref=f1e75]: 20.00°N, 0.00°E
+              - generic [ref=f1e76]: z2.5
+              - generic "Click anywhere on the map to evaluate site-specific seismic hazard" [ref=f1e77]: 💡 Click map for risk
+          - generic [ref=f1e79]:
+            - generic [ref=f1e80]: T-0 (Sequence Start)
+            - 'slider "Timeline sequence position: 100%" [ref=f1e82] [cursor=pointer]': "100"
+            - generic [ref=f1e83]: Latest (100%)
+        - paragraph [ref=f1e85]: Loading PMTiles basemap archive...
+        - generic [ref=f1e86]:
+          - region "Map" [ref=f1e88]
+          - generic:
+            - generic [ref=f1e89]:
+              - button "Zoom in" [ref=f1e90] [cursor=pointer]
+              - button "Zoom out" [ref=f1e92] [cursor=pointer]
+              - button "Drag to rotate map, click to reset north" [ref=f1e94]
+            - generic: 1000 km
+      - complementary [ref=f1e97]:
+        - generic [ref=f1e99]:
+          - generic [ref=f1e100]:
+            - generic [ref=f1e101]:
+              - generic [ref=f1e102]: ⚡
+              - heading "Seismic Events" [level=2] [ref=f1e103]
+              - generic [ref=f1e104]: "0"
+            - paragraph [ref=f1e105]: Catalog of cached USGS and simulation sequences
+          - generic [ref=f1e106]:
+            - generic [ref=f1e107]:
+              - text: Time Window
+              - generic [ref=f1e108]:
+                - button "24h" [ref=f1e109] [cursor=pointer]
+                - button "48h" [ref=f1e110] [cursor=pointer]
+                - button "72h" [ref=f1e111] [cursor=pointer]
+                - button "7d" [ref=f1e112] [cursor=pointer]
+            - generic [ref=f1e113]:
+              - generic [ref=f1e114]:
+                - generic [ref=f1e115]: Min Magnitude
+                - generic [ref=f1e116]: M 3.0+
+              - slider [ref=f1e117] [cursor=pointer]: "3"
+              - generic [ref=f1e118]:
+                - generic [ref=f1e119]: "2.0"
+                - generic [ref=f1e120]: "3.5"
+                - generic [ref=f1e121]: "5.0"
+                - generic [ref=f1e122]: "7.0"
+            - generic [ref=f1e123]:
+              - generic [ref=f1e124]: 🔎
+              - textbox "Filter by location, ID, or source..." [ref=f1e125]
+          - generic [ref=f1e126]: Fetching seismic records...

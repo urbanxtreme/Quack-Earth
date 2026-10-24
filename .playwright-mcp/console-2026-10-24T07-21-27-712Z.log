@@ -1,0 +1,111 @@
+[     131ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:15801
+[     517ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/status:0
+[     517ms] [WARNING] Status fetch error: Error: Status request failed with HTTP 503
+    at getSystemStatus (http://localhost:5173/src/api.ts:9:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:39:17 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:41
+[     517ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/events?hours=72&min_magnitude=3&limit=100:0
+[     517ms] [ERROR] Events fetch error: Error: Events fetch failed with HTTP 503
+    at getRecentEvents (http://localhost:5173/src/api.ts:39:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:51:16 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:58
+[     544ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/status:0
+[     545ms] [WARNING] Status fetch error: Error: Status request failed with HTTP 503
+    at getSystemStatus (http://localhost:5173/src/api.ts:9:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:39:17 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:41
+[     546ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/events?hours=72&min_magnitude=3&limit=100:0
+[     546ms] [ERROR] Events fetch error: Error: Events fetch failed with HTTP 503
+    at getRecentEvents (http://localhost:5173/src/api.ts:39:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:51:16 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:58
+[   10020ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/risk?lat=37.174&lon=37.032&time_window=24h&min_magnitude=4:0
+[   10021ms] [ERROR] Risk calc error: Error: Risk calculation failed with HTTP 503
+    at calculateRisk (http://localhost:5173/src/api.ts:25:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:70:16 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:77
+[   18603ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/risk?lat=37.288&lon=36.957&time_window=24h&min_magnitude=4:0
+[   18604ms] [ERROR] Risk calc error: Error: Risk calculation failed with HTTP 503
+    at calculateRisk (http://localhost:5173/src/api.ts:25:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:70:16 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:77
+[   40645ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/risk?lat=38.085&lon=37.452&time_window=24h&min_magnitude=4:0
+[   40645ms] [ERROR] Risk calc error: Error: Risk calculation failed with HTTP 503
+    at calculateRisk (http://localhost:5173/src/api.ts:25:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:70:16 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:77
+[   53212ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/status:0
+[   53212ms] [WARNING] Status fetch error: Error: Status request failed with HTTP 503
+    at getSystemStatus (http://localhost:5173/src/api.ts:9:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:39:17 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:41
+[   68818ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/risk?lat=35.77&lon=-117.599&time_window=24h&min_magnitude=4:0
+[   68818ms] [ERROR] Risk calc error: Error: Risk calculation failed with HTTP 503
+    at calculateRisk (http://localhost:5173/src/api.ts:25:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:70:16 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:77
+[   77296ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/risk?lat=35.892&lon=-117.683&time_window=24h&min_magnitude=4:0
+[   77296ms] [ERROR] Risk calc error: Error: Risk calculation failed with HTTP 503
+    at calculateRisk (http://localhost:5173/src/api.ts:25:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:70:16 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:77
+[   81301ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/risk?lat=35.65&lon=139.75&time_window=24h&min_magnitude=4:0
+[   81301ms] [ERROR] Risk calc error: Error: Risk calculation failed with HTTP 503
+    at calculateRisk (http://localhost:5173/src/api.ts:25:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:70:16 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:77
+[  128793ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/events?hours=72&min_magnitude=6&limit=100:0
+[  128793ms] [ERROR] Events fetch error: Error: Events fetch failed with HTTP 503
+    at getRecentEvents (http://localhost:5173/src/api.ts:39:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:51:16 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:58
+[  128801ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/status:0
+[  128801ms] [WARNING] Status fetch error: Error: Status request failed with HTTP 503
+    at getSystemStatus (http://localhost:5173/src/api.ts:9:9)
+    at async http://localhost:5173/src/Dashboard.tsx?t=1792826465190:39:17 @ http://localhost:5173/src/Dashboard.tsx?t=1792826465190:41
+[  141932ms] [ERROR] Failed to load resource: the server responded with a status of 503 (Service Unavailable) @ http://localhost:5173/api/refresh-catalog:0
+[  490670ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:15801
+[  496297ms] Error: Style is not done loading.
+    at Uk._checkLoaded (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=e2c98f18:29858:28)
+    at Uk.addSource (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=e2c98f18:30061:12)
+    at DF.addSource (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=e2c98f18:36486:49)
+    at http://localhost:5173/src/MapViewer.tsx?t=1792826983819:302:8
+    at http://localhost:5173/src/MapViewer.tsx?t=1792826983819:659:4
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:14175:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:941:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:6898:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:6933:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:8310:22)
+[  496297ms] [WARNING] %s
+
+%s
+ An error occurred in the <MapViewer> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:5447
+[  501642ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/src/MapViewer.tsx?t=1792826989326:0
+[  501643ms] [ERROR] [vite] Failed to reload /src/MapViewer.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:1022
+[  501686ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/src/MapViewer.tsx?t=1792826989326:0
+[  501687ms] [ERROR] [vite] Failed to reload /src/Dashboard.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://localhost:5173/@vite/client:1022
+[  502104ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/src/MapViewer.tsx?t=1792826989326:0
+[  515208ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:15801
+[  533844ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:15801
+[  689376ms] Error: Style is not done loading.
+    at Uk._checkLoaded (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=e2c98f18:29858:28)
+    at Uk.addSource (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=e2c98f18:30061:12)
+    at DF.addSource (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=e2c98f18:36486:49)
+    at http://localhost:5173/src/MapViewer.tsx?t=1792827176951:312:8
+    at http://localhost:5173/src/MapViewer.tsx?t=1792827176951:675:4
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:14175:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:941:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:6898:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:6933:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:8310:22)
+[  689371ms] [WARNING] %s
+
+%s
+ An error occurred in the <MapViewer> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:5447
+[  727367ms] Error: Style is not done loading.
+    at Uk._checkLoaded (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=e2c98f18:29858:28)
+    at Uk.addSource (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=e2c98f18:30061:12)
+    at DF.addSource (http://localhost:5173/node_modules/.vite/deps/maplibre-gl.js?v=e2c98f18:36486:49)
+    at http://localhost:5173/src/MapViewer.tsx?t=1792827214966:315:8
+    at http://localhost:5173/src/MapViewer.tsx?t=1792827214966:679:4
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:14175:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:941:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:6898:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:6933:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:8310:22)
+[  727368ms] [WARNING] %s
+
+%s
+ An error occurred in the <MapViewer> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:5447
+[  772711ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=24f89b58:15801

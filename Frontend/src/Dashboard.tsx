@@ -67,7 +67,7 @@ export default function Dashboard({initialPlace }: DashboardProps) {
       const res = await getRecentEvents({
         hours: timeWindowHours,
         min_magnitude: minMagnitude,
-        limit: 100,
+        limit: 500,
       });
       if (ticket !== eventsRequestRef.current || scenarioIdRef.current !== "live_usgs") return;
       setEvents(res.events || []);
