@@ -38,9 +38,6 @@ interface HeatmapStats {
 
 // Proxied through Vite dev server to guarantee 100% CORS & HTTP Range support on any local port
 const getPmtilesUrl = () => {
-  if (typeof window !== "undefined") {
-    return `${window.location.origin}/pmtiles-proxy/v4.pmtiles`;
-  }
   return "https://latest.protomaps.com/v4.pmtiles";
 };
 
