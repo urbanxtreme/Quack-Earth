@@ -787,7 +787,7 @@ export default function MapViewer({
               <input
                 type="text"
                 className="search-input"
-                placeholder="Enter place name (e.g. Turkey, San Francisco, Kochi)..."
+                placeholder="Enter place name"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 disabled={isSearching}
@@ -803,14 +803,14 @@ export default function MapViewer({
                   ✕
                 </button>
               )}
-              <button
+              {/* <button
                 type="submit"
                 className="btn-search-submit"
                 disabled={isSearching || !searchInput.trim()}
                 id="generate-heatmap-button"
               >
-                {isSearching ? <span className="btn-spinner" /> : <span>Center Heatmap</span>}
-              </button>
+                {isSearching ? <span className="btn-spinner" /> : <span>🔍</span>}
+              </button> */}
             </div>
           </form>
 

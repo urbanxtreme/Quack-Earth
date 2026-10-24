@@ -193,18 +193,6 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
         {/* Global Live Stat Badges */}
         <div className="header-metrics">
           <div className="metric-badge">
-            <span className="metric-dot" />
-            <span className="metric-label">Mode:</span>
-            <span className="metric-value font-mono">
-              {activeScenarioId !== "live_usgs"
-                ? "SCENARIO REPLAY"
-                : status?.mode === "online"
-                ? "USGS ONLINE"
-                : "OFFLINE EDGE"}
-            </span>
-          </div>
-
-          <div className="metric-badge">
             <span className="metric-label">Active Events:</span>
             <span className="metric-value font-mono text-cyan">{events.length}</span>
           </div>
@@ -228,7 +216,7 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
 
         {/* Primary Navigation Tabs */}
         <nav className="header-nav-tabs">
-          <button
+          {/* <button
             type="button"
             className={`nav-tab-btn ${activeTab === "map" ? "active" : ""}`}
             onClick={() => {
@@ -240,7 +228,7 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
           >
             <span className="nav-icon">🗺️</span>
             <span className="nav-text">Map</span>
-          </button>
+          </button> */}
 
           <button
             type="button"
@@ -282,7 +270,7 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
             <span className="nav-text">Report</span>
           </button>
 
-          <button
+          {/* <button
             type="button"
             className={`nav-tab-btn ${activeTab === "status" ? "active" : ""}`}
             onClick={() => {
@@ -292,7 +280,7 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
           >
             <span className="nav-icon">⚙️</span>
             <span className="nav-text">Status</span>
-          </button>
+          </button> */}
         </nav>
 
         {/* Sidebar Toggle */}
