@@ -844,6 +844,74 @@ export default function MapViewer({
         </div>
 
         <div className="map-top-right">
+          {/* Mainshock Selector Dropdown */}
+          {/* <div className="mainshock-selector-group">
+            <span className="scenario-label font-mono">MAINSHOCK:</span>
+            <select
+              className="mainshock-dropdown font-mono"
+              value={effectiveMainshock?.id || ""}
+              onChange={(e) => {
+                const found = events.find((ev) => ev.id === e.target.value);
+                onSelectMainshock?.(found || null);
+              }}
+              title="Select sequence mainshock"
+            >
+              <option value="">
+                {effectiveMainshock ? `★ Mainshock: M${effectiveMainshock.magnitude.toFixed(1)} (${effectiveMainshock.place?.slice(0, 18)}...)` : "-- Select Real USGS Earthquake --"}
+              </option>
+              {events
+                .filter((ev) => ev.magnitude >= 4.0)
+                .sort((a, b) => b.magnitude - a.magnitude)
+                .map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.source === "user_report" ? "[Local]" : "[USGS]"} M{ev.magnitude.toFixed(1)} - {ev.place?.slice(0, 26) || ev.id}
+                  </option>
+                ))}
+            </select>
+            {effectiveMainshock && (
+              <button
+                type="button"
+                className="btn-clear-mainshock"
+                onClick={() => onSelectMainshock?.(null)}
+                title="Clear selected mainshock"
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div> */}
+
+          {/* Forecast Horizon Window Toggle */}
+          {/* <div className="forecast-window-selector">
+            <span className="scenario-label font-mono">WINDOW:</span>
+            {(["24h", "72h", "7d"] as const).map((w) => (
+              <button
+                key={w}
+                type="button"
+                className={`forecast-window-btn font-mono ${activeWindow === w ? "active" : ""}`}
+                onClick={() => handleForecastWindowChange(w)}
+                title={`Set aftershock risk forecast window to ${w}`}
+              >
+                {w}
+              </button>
+            ))}
+          </div> */}
+
+          {/* Minimum Magnitude Slider */}
+          {/* <div className="mag-toolbar-slider">
+            <span className="mag-toolbar-label font-mono">Min Mag:</span>
+            <span className="mag-toolbar-val font-mono">M{activeMinMag.toFixed(1)}</span>
+            <input
+              type="range"
+              min="2.0"
+              max="6.0"
+              step="0.5"
+              value={activeMinMag}
+              onChange={(e) => handleMinMagChange(parseFloat(e.target.value))}
+              className="mag-toolbar-input"
+              title={`Filter events and forecast to magnitude >= ${activeMinMag.toFixed(1)}`}
+            />
+          </div> */}
+
           {/* Scenario Selector Dropdown */}
           <div className="scenario-selector-group">
             <span className="scenario-label font-mono">SCENARIO:</span>
