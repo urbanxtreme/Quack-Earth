@@ -148,7 +148,7 @@ export interface RiskGridResponse {
 }
 
 // Base endpoint configuration
-const API_BASE = '/api';
+const API_BASE = 'https://quack-earth.onrender.com/api';
 
 /**
  * Fetch System Status from Backend
