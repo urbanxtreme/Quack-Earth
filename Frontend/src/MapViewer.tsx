@@ -153,8 +153,27 @@ export default function MapViewer({
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
-  const [activeLocation, setActiveLocation] = useState<GeocodedLocation | null>(null);
-  const [heatmapStats, setHeatmapStats] = useState<HeatmapStats | null>(null);
+  // const [activeLocation, setActiveLocation] = useState<GeocodedLocation | null>(null);
+
+  // Layer visibility toggles
+  const [showEventsLayer, setShowEventsLayer] = useState<boolean>(true);
+  const [showMainshockLayer, setShowMainshockLayer] = useState<boolean>(true);
+  const [showPredictedAftershocks, setShowPredictedAftershocks] = useState<boolean>(true);
+  const [showObservedAftershocks, setShowObservedAftershocks] = useState<boolean>(true);
+  const [showFaultsLayer, setShowFaultsLayer] = useState<boolean>(true);
+  const [showForecastHeatmap, setShowForecastHeatmap] = useState<boolean>(true);
+  const [isLegendExpanded, setIsLegendExpanded] = useState<boolean>(true);
+
+  // Local state for forecast window and min magnitude if not controlled externally
+  const [internalForecastWindow, setInternalForecastWindow] = useState<"24h" | "72h" | "7d">("24h");
+  const [internalMinMagnitude, setInternalMinMagnitude] = useState<number>(3.0);
+  const activeWindow = forecastWindow || internalForecastWindow;
+  const activeMinMag = minMagnitude !== undefined ? minMagnitude : internalMinMagnitude;
+
+  // Identified sequence aftershocks state
+  const [sequenceDetails, setSequenceDetails] = useState<SequenceDetailsResponse | null>(null);
+  const [riskGridFeatures, setRiskGridFeatures] = useState<FeatureCollection | null>(null);
+  const [faultsData, setFaultsData] = useState<FeatureCollection<LineString>>(FALLBACK_FAULTS_GEOJSON);
 
   // 72-Hour / Sequence Timeline Scrubbing state
   const [timelinePercent, setTimelinePercent] = useState<number>(100);
@@ -445,7 +464,7 @@ export default function MapViewer({
         return;
       }
 
-      setActiveLocation(location);
+      // setActiveLocation(location);
 
       const map = mapRef.current;
       if (map) {
@@ -763,7 +782,7 @@ export default function MapViewer({
     }
   };
 
-  const presetPlaces = ["Tokyo", "San Francisco", "Kochi", "Chile", "Nepal", "Turkey"];
+  // const presetPlaces = ["Turkey", "Tokyo", "San Francisco", "Chile", "Nepal", "Kochi"];
 
   return (
     <div className="map-view-container">
@@ -817,8 +836,8 @@ export default function MapViewer({
             </div>
           </form>
 
-          {/* Quick preset location tags */}
-          <div className="search-presets">
+          {/* Quick Presets */}
+          {/* <div className="search-presets">
             <span className="presets-label">Quick:</span>
             {presetPlaces.map((place) => (
               <button
@@ -833,7 +852,7 @@ export default function MapViewer({
                 {place}
               </button>
             ))}
-          </div>
+          </div> */}
 
           {/* Live Feedback Toast */}
           {searchFeedback && (
