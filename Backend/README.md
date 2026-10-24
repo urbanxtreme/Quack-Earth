@@ -1,8 +1,9 @@
 # Seismic Risk Anticipation API — Backend
 
-Lightweight Flask API for short-term probabilistic seismic risk estimation (`omori-style-v1`). Designed for edge/offline operation with cached catalog data and local event inputs.
+Lightweight Flask API for short-term probabilistic seismic risk estimation (`quack-risk-etas-v1`). Designed for edge/offline operation with cached catalog data, multimodal citizen reports/sensors, and Civil Defense emergency decision support.
 
-**Base URL (local):** `http://localhost:8000`
+**Base URL (local):** `http://localhost:8000`  
+*(All endpoints are also available with `/api`, `/api/v1`, and `/v1` prefixes, e.g. `http://localhost:8000/api/v1/risk`).*
 
 ---
 
@@ -22,194 +23,54 @@ The SQLite cache is created at `Backend/instance/earthquake_cache.db`. Set `EART
 
 ## Endpoints Overview
 
-| Method | Endpoint              | Description                                      |
-|--------|-----------------------|--------------------------------------------------|
-| GET    | `/status`             | System health and cache status                   |
-| GET    | `/risk`               | Calculate short-term risk scores for an area     |
-| GET    | `/events`             | Retrieve recent earthquakes from cache           |
-| POST   | `/local-event`        | Add a local event/report and update risk         |
-| POST   | `/refresh-catalog`    | Download latest catalog from USGS (online only)  |
-| GET    | `/risk/grid`          | Get risk values on a regular grid (for heatmap)  |
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/status` (or `/health`) | System health, offline/online mode, and cache metadata |
+| `GET` | `/events` | Paginated recent earthquakes with time, mag, and geojson support |
+| `GET` | `/events/<event_id>` | Detailed metadata for a single earthquake |
+| `GET` | `/map/events` | High-performance GeoJSON Point FeatureCollection within bounding box |
+| `POST` | `/local-event` | Ingest local observation with multimodal corroboration check |
+| `POST` | `/refresh-catalog` (or `/sync`) | Fetch latest events from USGS ComCat (online only) |
+| `GET` | `/risk` | Short-term seismic risk scores, 24h/7d probabilities & Civil Defense verdict |
+| `GET` | `/risk/grid` | Risk calculation on a regular bounding box grid |
+| `GET` | `/risk/heatmap` | GeoJSON Polygon FeatureCollection for direct map polygon rendering |
+| `GET` | `/risk/verdict` | Civil Defense Situation Verdict and Emergency Guidance |
+| `POST` | `/forecasts` | Aftershock hazard calculation triggered by a specific reference event |
+| `GET` | `/model/params` (or `/risk/params`) | Retrieve active ETAS model parameters |
+| `POST` | `/model/calibrate` (or `/risk/calibrate`) | MLE fitting of ETAS parameters against catalog |
+| `GET` | `/scenarios` | List benchmark earthquake scenarios and drill presets |
+| `GET` | `/scenarios/<scenario_id>` | Detailed metadata and sequence events for a scenario |
 
-*(Note: Routes are also available under `/api/v1/` for compatibility).*
-
----
-
-## 1. System Status (`GET /status`)
-
-Returns operational status, online/offline mode, and cache metadata.
-
-**Response 200:**
-```json
-{
-  "status": "ok",
-  "mode": "offline",
-  "cached_events": 1247,
-  "local_events_added": 2,
-  "last_catalog_update": "2026-10-23T08:00:00Z",
-  "model": "omori-style-v1"
-}
-```
+For full request/response schemas, field types, and mathematical formulas, see the comprehensive [API Documentation](../docs/api_documentation.md).
 
 ---
 
-## 2. Risk Calculation (`GET /risk`)
+## Key Highlights & Features
 
-Calculates short-term seismic risk for a given location or area.
+### 1. Offline-First Operation
+All endpoints (`/risk`, `/risk/grid`, `/risk/heatmap`, `/events`, `/scenarios`) function completely offline without internet connectivity, relying on the local SQLite catalog cache.
 
-**Query Parameters:**
-- `lat` (float, required): Center latitude (-90 to 90)
-- `lon` (float, required): Center longitude (-180 to 180)
-- `radius_km` (float, optional, default: 50.0): Search radius around center
-- `time_window` (string, optional, default: `"24h"`): `"24h"` or `"7d"`
-- `min_magnitude` (float, optional, default: 4.0): Minimum magnitude threshold
+### 2. Civil Defense Verdict & Guidance
+Endpoints `/risk`, `/risk/grid`, and `/risk/verdict` automatically generate:
+- `verdict`: Plain-language situational report for field radios.
+- `public_zone`: Operational zone (`usual`, `stay aware`, `limit work`, `priority`).
+- `excavation_action`: SAR engineering directive (`continue`, `open-area checks`, `pause`).
+- `guidance`: Structured sector-level breakdown for incident commanders.
 
-**Response 200:**
-```json
-{
-  "time_window": "24h",
-  "min_magnitude": 4.0,
-  "center": { "lat": 34.05, "lon": -118.25 },
-  "baseline_rate": 0.018,
-  "zones": [
-    {
-      "lat": 34.05,
-      "lon": -118.25,
-      "risk_score": 0.76,
-      "relative_to_baseline": 11.2,
-      "expected_events": 0.21
-    }
-  ],
-  "generated_at": "2026-10-23T14:32:00Z"
-}
-```
+### 3. Multimodal Corroboration Gate
+Submissions to `POST /local-event` are cross-referenced against the local catalog and sensor cluster to evaluate corroboration status (`corroborated` vs `pending_cluster`).
 
----
-
-## 3. Recent Events (`GET /events`)
-
-Returns recent earthquakes from the cached catalog and local reports.
-
-**Query Parameters:**
-- `hours` (int, default: 72): Look-back window in hours
-- `min_magnitude` (float, default: 2.5): Minimum magnitude
-- `limit` (int, default: 200): Maximum number of events returned
-
-**Response 200:**
-```json
-{
-  "count": 2,
-  "events": [
-    {
-      "id": "us7000abcd",
-      "time": "2026-10-23T10:15:00Z",
-      "lat": 34.12,
-      "lon": -118.31,
-      "magnitude": 4.8,
-      "depth_km": 12.4,
-      "source": "usgs"
-    },
-    {
-      "id": "local_001",
-      "time": "2026-10-23T14:20:00Z",
-      "lat": 34.05,
-      "lon": -118.25,
-      "magnitude": 5.1,
-      "source": "user_report"
-    }
-  ]
-}
-```
-
----
-
-## 4. Add Local Event (`POST /local-event`)
-
-Adds a local observation or user report. The event is persisted and factored into subsequent risk calculations.
-
-**Request Body:**
-```json
-{
-  "lat": 34.05,
-  "lon": -118.25,
-  "magnitude": 5.2,
-  "time": "2026-10-23T14:30:00Z",
-  "source": "user_report",
-  "note": "Strong shaking felt"
-}
-```
-
-**Response 201:**
-```json
-{
-  "status": "added",
-  "event_id": "local_002",
-  "message": "Local event added. Risk will include this event.",
-  "nearby_risk_updated": true
-}
-```
-
----
-
-## 5. Refresh Catalog (`POST /refresh-catalog`)
-
-Downloads the latest catalog from USGS and updates the local cache. If offline, returns HTTP 503 while preserving cache.
-
-**Request Body (optional):**
-```json
-{
-  "min_magnitude": 2.5,
-  "days_back": 30
-}
-```
-
-**Response 200 (online):**
-```json
-{
-  "status": "updated",
-  "events_fetched": 342,
-  "last_catalog_update": "2026-10-23T15:01:00Z"
-}
-```
-
-**Response 503 (offline):**
-```json
-{
-  "status": "failed",
-  "message": "No internet connection. Using cached catalog."
-}
-```
-
----
-
-## 6. Risk Grid (`GET /risk/grid`)
-
-Calculates risk scores on a regular latitude/longitude grid for heatmaps.
-
-**Query Parameters:**
-- `min_lat` (float, required): Southern boundary
-- `max_lat` (float, required): Northern boundary
-- `min_lon` (float, required): Western boundary
-- `max_lon` (float, required): Eastern boundary
-- `resolution` (float, default: 0.1): Grid step in degrees
-- `time_window` (string, default: `"24h"`): `"24h"` or `"7d"`
-- `min_magnitude` (float, default: 4.0): Magnitude threshold
-
-**Response 200:**
-```json
-{
-  "time_window": "24h",
-  "grid": [
-    { "lat": 33.5, "lon": -119.0, "risk_score": 0.12 },
-    { "lat": 33.5, "lon": -118.85, "risk_score": 0.31 },
-    { "lat": 33.65, "lon": -118.7, "risk_score": 0.68 }
-  ]
-}
-```
+### 4. Direct GeoJSON Support
+- `/events?format=geojson`
+- `/risk/grid?format=geojson`
+- `/map/events` (Point FeatureCollection)
+- `/risk/heatmap` (Polygon FeatureCollection)
 
 ---
 
 ## Running Tests
+
+Execute the complete backend test suite:
 
 ```powershell
 python -m pytest

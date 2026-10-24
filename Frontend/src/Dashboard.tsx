@@ -36,7 +36,7 @@ export default function Dashboard({initialPlace }: DashboardProps) {
   const [riskData, setRiskData] = useState<RiskResponse | null>(null);
 
   // Filter & coordinate states
-  const [timeWindowHours, setTimeWindowHours] = useState<number>(72);
+  const [timeWindowHours, setTimeWindowHours] = useState<number>(24);
   const [minMagnitude, setMinMagnitude] = useState<number>(3.0);
   const [riskTimeWindow, setRiskTimeWindow] = useState<"24h" | "72h" | "7d">("24h");
   const [inspectedCoords, setInspectedCoords] = useState<{ lat: number; lon: number } | null>(null);
