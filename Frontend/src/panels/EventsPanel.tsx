@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import type { EarthquakeEvent } from "../api";
+import { shockLabel, shockRole } from "../shockRole";
 
 interface EventsPanelProps {
   events: EarthquakeEvent[];
@@ -67,8 +68,19 @@ export default function EventsPanel({
           <h2 className="panel-title">Seismic Events</h2>
           <span className="count-pill">{filteredEvents.length}</span>
         </div>
-        <p className="panel-subtitle">Catalog of cached USGS & edge sensor detections</p>
+        <p className="panel-subtitle">Catalog of cached USGS and simulation sequences</p>
       </div>
+
+      {events.length > 1 && (
+        <p className="sequence-count-line font-mono">
+          {events.filter((event) => shockRole(event, events) === "mainshock").length} mainshock
+          {" · "}
+          {events.filter((event) => shockRole(event, events) === "aftershock").length} aftershocks
+          {events.some((event) => shockRole(event, events) === "foreshock")
+            ? ` · ${events.filter((event) => shockRole(event, events) === "foreshock").length} foreshock`
+            : ""}
+        </p>
+      )}
 
       {/* Filter Controls */}
       <div className="filter-controls">
@@ -155,6 +167,7 @@ export default function EventsPanel({
             {filteredEvents.map((event) => {
               const isSelected = selectedEventId === event.id;
               const magClass = getMagColorClass(event.magnitude);
+              const role = shockRole(event, events);
 
               return (
                 <li
@@ -191,6 +204,7 @@ export default function EventsPanel({
                       <span className={`source-pill ${event.source === "user_report" ? "pill-user" : "pill-usgs"}`}>
                         {event.source === "user_report" ? "Local" : "USGS"}
                       </span>
+                      <span className={`shock-role-pill role-${role}`}>{shockLabel(role)}</span>
                     </div>
 
                     <div className="corroboration-tag-row">

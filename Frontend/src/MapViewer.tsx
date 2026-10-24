@@ -6,6 +6,7 @@ import { layers, namedFlavor } from "@protomaps/basemaps";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import type { FeatureCollection, Point } from "geojson";
 import type { EarthquakeEvent } from "./api";
+import { shockLabel, shockRole } from "./shockRole";
 
 // Configure MapLibre Web Worker for Vite
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
@@ -136,12 +137,16 @@ export default function MapViewer({
   targetCoords,
   onSyncSuccess,
   activeScenarioId = "live_usgs",
-  onSelectScenario,
 }: MapViewerProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const centerMarkerRef = useRef<maplibregl.Marker | null>(null);
   const clickMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const shockMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const displayedEventsRef = useRef<EarthquakeEvent[]>([]);
+  const catalogEventsRef = useRef<EarthquakeEvent[]>([]);
+  const onSelectEventRef = useRef(onSelectEvent);
+  onSelectEventRef.current = onSelectEvent;
   const currentHeatmapDataRef = useRef<FeatureCollection | null>(null);
 
   const [mapLoaded, setMapLoaded] = useState<boolean>(false);
@@ -175,6 +180,15 @@ export default function MapViewer({
     const cutoff = tMin + (tMax - tMin) * (timelinePercent / 100);
     return sortedEvents.filter((e) => new Date(e.time).getTime() <= cutoff);
   }, [sortedEvents, timelinePercent]);
+
+  displayedEventsRef.current = displayedEvents;
+  catalogEventsRef.current = events;
+
+  const isSimulation = activeScenarioId !== "live_usgs";
+  const aftershockCount = useMemo(
+    () => events.filter((event) => shockRole(event, events) === "aftershock").length,
+    [events],
+  );
 
   // Automated playback timer
   useEffect(() => {
@@ -325,19 +339,23 @@ export default function MapViewer({
         const props = feature.properties;
         const coords = (feature.geometry as Point).coordinates;
 
-        const foundEvent = evList.find((ev) => ev.id === props.id);
+        const wanted = String(props.id ?? "");
+        const foundEvent = displayedEventsRef.current.find((ev) => ev.id === wanted);
         if (foundEvent && onSelectEvent) {
           onSelectEvent(foundEvent);
         }
+        const role = foundEvent ? shockRole(foundEvent, catalogEventsRef.current) : "mainshock";
+        const roleName = shockLabel(role);
 
         new maplibregl.Popup({ offset: 15 })
           .setLngLat([coords[0], coords[1]])
           .setHTML(
-            `<div class="epicenter-popup">
-              <h4>M ${props.mag} - ${props.place}</h4>
+            `<div class="${role === "aftershock" ? "aftershock-popup" : "epicenter-popup"}">
+              <h4>${roleName} M ${props.mag}</h4>
+              <p>${props.place}</p>
               <p><strong>Depth:</strong> ${props.depth} km</p>
               <p><strong>Time:</strong> ${new Date(props.time).toLocaleString()}</p>
-              <span class="popup-tag">${props.source === "user_report" ? "Local Report" : "USGS"}</span>
+              <span class="popup-tag ${role}-tag">${roleName}</span>
             </div>`
           )
           .addTo(map);
@@ -542,8 +560,10 @@ export default function MapViewer({
       // Click on map to inspect coordinates or trigger risk evaluation
       map.on("click", (e) => {
         // Prevent if clicking on marker layer
-        const features = map.queryRenderedFeatures(e.point, { layers: ["events-circles"] });
-        if (features && features.length > 0) return;
+        if (map.getLayer("events-circles")) {
+          const features = map.queryRenderedFeatures(e.point, { layers: ["events-circles"] });
+          if (features && features.length > 0) return;
+        }
 
         const coords = { lat: e.lngLat.lat, lon: e.lngLat.lng };
         if (onMapClick) {
@@ -634,22 +654,116 @@ export default function MapViewer({
     }
   }, [displayedEvents, mapLoaded, updateEventsLayer, applyHeatmapLayer, buildEventsGeoJSON]);
 
-  // Sync selected event camera fly-to
+  // Keep the scrubber at the end when a new simulation is chosen, so every aftershock is on the map.
   useEffect(() => {
-    if (selectedEvent && mapRef.current) {
-      mapRef.current.flyTo({
-        center: [selectedEvent.lon, selectedEvent.lat],
-        zoom: 7.0,
-        speed: 1.5,
-        curve: 1.3,
-        essential: true,
-      });
+    setTimelinePercent(100);
+    setIsPlayingTimeline(false);
+  }, [activeScenarioId]);
+
+  // Choosing one shock later in the sequence reveals it instead of leaving it behind the scrubber.
+  useEffect(() => {
+    if (!selectedEvent || sortedEvents.length < 2) return;
+    const tMin = new Date(sortedEvents[0].time).getTime();
+    const tMax = new Date(sortedEvents[sortedEvents.length - 1].time).getTime();
+    if (tMax <= tMin) return;
+    const ratio = (new Date(selectedEvent.time).getTime() - tMin) / (tMax - tMin);
+    const needed = Math.min(100, Math.max(0, ratio * 100));
+    setTimelinePercent((prev) => (prev < needed ? needed : prev));
+  }, [selectedEvent, sortedEvents]);
+
+  // Frame the whole simulation sequence once, so later aftershocks are inside the view.
+  const sequenceKey = isSimulation ? events.map((event) => event.id).join("|") : "";
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded || !sequenceKey) return;
+    const bounds = new maplibregl.LngLatBounds();
+    events.forEach((event) => bounds.extend([event.lon, event.lat]));
+    if (bounds.isEmpty()) return;
+    map.fitBounds(bounds, { padding: 90, maxZoom: 8, duration: 800 });
+  }, [sequenceKey, mapLoaded, events]);
+
+  // Draw one labeled marker per shock in a simulation. The selected aftershock stays open.
+  useEffect(() => {
+    const map = mapRef.current;
+    shockMarkersRef.current.forEach((marker) => marker.remove());
+    shockMarkersRef.current = [];
+    if (!map || !mapLoaded || !isSimulation) return;
+
+    const visible = [...displayedEvents];
+    if (selectedEvent && !visible.some((event) => event.id === selectedEvent.id)) {
+      visible.push(selectedEvent);
     }
-  }, [selectedEvent]);
+
+    visible.forEach((event) => {
+      const role = shockRole(event, events);
+      const selected = selectedEvent?.id === event.id;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `shock-marker role-${role}${selected ? " is-selected" : ""}`;
+      button.dataset.shockId = event.id;
+      button.dataset.shockRole = role;
+      button.setAttribute("aria-label", `${shockLabel(role)} magnitude ${event.magnitude.toFixed(1)}`);
+      button.innerHTML = `<span class="shock-mag">${event.magnitude.toFixed(1)}</span>`;
+      button.addEventListener("click", (clickEvent) => {
+        clickEvent.stopPropagation();
+        onSelectEventRef.current?.(event);
+      });
+
+      const popup = new maplibregl.Popup({ offset: 18, closeButton: true }).setHTML(
+        `<div class="${role}-popup">
+          <h4>${shockLabel(role)} M${event.magnitude.toFixed(1)}</h4>
+          <p>${event.place || "Simulation sequence"}</p>
+          <p><strong>Time:</strong> ${new Date(event.time).toLocaleString()}</p>
+          <span class="popup-tag ${role}-tag">${shockLabel(role)} in this simulation</span>
+        </div>`
+      );
+      const marker = new maplibregl.Marker({ element: button, anchor: "center" })
+        .setLngLat([event.lon, event.lat])
+        .setPopup(popup)
+        .addTo(map);
+      if (selected) marker.togglePopup();
+      shockMarkersRef.current.push(marker);
+    });
+  }, [displayedEvents, selectedEvent, mapLoaded, isSimulation, events]);
+
+  const lastFlownEventId = useRef<string | null>(null);
+  useEffect(() => {
+    lastFlownEventId.current = null;
+  }, [activeScenarioId]);
+
+  // Fly to a shock the user picked. The first selection in a simulation is framed by fitBounds instead.
+  useEffect(() => {
+    if (!selectedEvent || !mapRef.current || !mapLoaded) return;
+    if (isSimulation && lastFlownEventId.current === null) {
+      lastFlownEventId.current = selectedEvent.id;
+      return;
+    }
+    if (lastFlownEventId.current === selectedEvent.id) return;
+    lastFlownEventId.current = selectedEvent.id;
+    mapRef.current.flyTo({
+      center: [selectedEvent.lon, selectedEvent.lat],
+      zoom: isSimulation ? 8.2 : 7.0,
+      speed: 1.5,
+      curve: 1.3,
+      essential: true,
+    });
+  }, [selectedEvent, mapLoaded, isSimulation, activeScenarioId]);
 
   // Sync external target coordinates
   useEffect(() => {
     if (targetCoords && mapRef.current) {
+      const coveredByShock =
+        isSimulation &&
+        selectedEvent &&
+        Math.abs(selectedEvent.lat - targetCoords.lat) < 0.02 &&
+        Math.abs(selectedEvent.lon - targetCoords.lon) < 0.02;
+      if (coveredByShock) {
+        if (clickMarkerRef.current) {
+          clickMarkerRef.current.remove();
+          clickMarkerRef.current = null;
+        }
+        return;
+      }
       mapRef.current.flyTo({
         center: [targetCoords.lon, targetCoords.lat],
         zoom: 6.5,
@@ -678,7 +792,7 @@ export default function MapViewer({
         .setLngLat([targetCoords.lon, targetCoords.lat])
         .addTo(mapRef.current);
     }
-  }, [targetCoords]);
+  }, [targetCoords, selectedEvent, isSimulation]);
 
   // Toggle layer visibilities
   useEffect(() => {
@@ -909,22 +1023,6 @@ export default function MapViewer({
             />
           </div> */}
 
-          {/* Scenario Selector Dropdown */}
-          <div className="scenario-selector-group">
-            <span className="scenario-label font-mono">SCENARIO:</span>
-            <select
-              className="scenario-select-dropdown font-mono"
-              value={activeScenarioId || "live_usgs"}
-              onChange={(e) => onSelectScenario?.(e.target.value)}
-              title="Select a disaster scenario or live USGS feed"
-            >
-              <option value="live_usgs">🌐 Live USGS Streaming Feed</option>
-              <option value="turkey_2023">🇹🇷 2023 Turkey M7.8 Doublet</option>
-              <option value="tokyo_bay">🇯🇵 Tokyo Bay Fault Swarm</option>
-              <option value="ridgecrest_2019">🇺🇸 2019 Ridgecrest Sequence</option>
-            </select>
-          </div>
-
           {/* Layer toggles */}
           <div className="layer-toggle-group">
             <button
@@ -1046,6 +1144,82 @@ export default function MapViewer({
       )}
 
       {/* Unified Mission-Control Timeline & Telemetry Console */}
+      <footer className="timeline-scrubber-bar mission-control-console">
+        {/* Top Control & Telemetry Row */}
+        <div className="timeline-dock-header">
+          {/* Left: Playback Controls */}
+          <div className="timeline-controls-left">
+            <button
+              type="button"
+              className={`btn-timeline-play ${isPlayingTimeline ? "active" : ""}`}
+              onClick={() => {
+                if (timelinePercent >= 100) {
+                  setTimelinePercent(0);
+                }
+                setIsPlayingTimeline((prev) => !prev);
+              }}
+              title={isPlayingTimeline ? "Pause sequence playback" : "Play earthquake sequence playback"}
+            >
+              {isPlayingTimeline ? "⏸ Pause" : "▶ Play Sequence"}
+            </button>
+            <button
+              type="button"
+              className="btn-timeline-reset"
+              onClick={() => {
+                setIsPlayingTimeline(false);
+                setTimelinePercent(100);
+              }}
+              title="Reset scrubber to latest"
+            >
+              ↺ Latest
+            </button>
+          </div>
+
+          {/* Center: Shock Counter Telemetry */}
+          <div className="timeline-dock-center">
+            <span className="timeline-shock-badge font-mono">
+              ⚡ <strong className="text-cyan">{displayedEvents.length}</strong> of {sortedEvents.length} shocks
+              {isSimulation && (
+                <span className="timeline-pct-tag">{aftershockCount} aftershocks in this sequence</span>
+              )}
+              <span className="timeline-pct-tag">({timelinePercent.toFixed(0)}%)</span>
+            </span>
+          </div>
+
+          {/* Right: Viewport Coordinates & Hint */}
+          <div className="timeline-dock-coords font-mono">
+            <span className="dock-coord-val">{viewportInfo.lat}°N, {viewportInfo.lng}°E</span>
+            <span className="dock-zoom-badge">z{viewportInfo.zoom}</span>
+            <span className="dock-tip-pill" title="Click anywhere on the map to evaluate site-specific seismic hazard">
+              <span className="click-hint-full">💡 Click map for risk</span>
+              <span className="click-hint-short">💡 Click for risk</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Bottom: Sequence Range Track */}
+        <div className="timeline-slider-container">
+          <div className="timeline-slider-track-row">
+            <span className="timeline-edge-label font-mono">T-0 (Sequence Start)</span>
+            <div className="timeline-range-wrapper">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={timelinePercent}
+                onChange={(e) => {
+                  setIsPlayingTimeline(false);
+                  setTimelinePercent(parseFloat(e.target.value));
+                }}
+                className="styled-range timeline-range-slider"
+                title={`Timeline sequence position: ${timelinePercent.toFixed(0)}%`}
+              />
+            </div>
+            <span className="timeline-edge-label font-mono">Latest (100%)</span>
+          </div>
+        </div>
+      </footer>
 
       {/* Loading Overlay */}
       {!mapLoaded && !loadError && (

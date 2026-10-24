@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import MapViewer from "./MapViewer";
 import EventsPanel from "./panels/EventsPanel";
 import RiskPanel from "./panels/RiskPanel";
@@ -45,6 +45,8 @@ export default function Dashboard({initialPlace }: DashboardProps) {
   // Loading states
   const [isEventsLoading, setIsEventsLoading] = useState<boolean>(false);
   const [isRiskLoading, setIsRiskLoading] = useState<boolean>(false);
+  const scenarioIdRef = useRef(activeScenarioId);
+  const eventsRequestRef = useRef(0);
 
   // Fetch system status
   const loadStatus = useCallback(async () => {
@@ -56,8 +58,10 @@ export default function Dashboard({initialPlace }: DashboardProps) {
     }
   }, []);
 
-  // Fetch recent events
+  // Fetch recent events. A simulation sequence stays on screen until Live USGS is chosen again.
   const loadEvents = useCallback(async () => {
+    if (scenarioIdRef.current !== "live_usgs") return;
+    const ticket = ++eventsRequestRef.current;
     setIsEventsLoading(true);
     try {
       const res = await getRecentEvents({
@@ -65,11 +69,12 @@ export default function Dashboard({initialPlace }: DashboardProps) {
         min_magnitude: minMagnitude,
         limit: 100,
       });
+      if (ticket !== eventsRequestRef.current || scenarioIdRef.current !== "live_usgs") return;
       setEvents(res.events || []);
     } catch (err) {
       console.error("Events fetch error:", err);
     } finally {
-      setIsEventsLoading(false);
+      if (ticket === eventsRequestRef.current) setIsEventsLoading(false);
     }
   }, [timeWindowHours, minMagnitude]);
 
@@ -95,6 +100,8 @@ export default function Dashboard({initialPlace }: DashboardProps) {
 
   // Handle Scenario switching
   const handleSelectScenario = useCallback((scenarioId: string) => {
+    scenarioIdRef.current = scenarioId;
+    eventsRequestRef.current += 1;
     setActiveScenarioId(scenarioId);
     const scenario = PRESET_SCENARIOS.find((s) => s.id === scenarioId);
     if (!scenario) return;
@@ -111,11 +118,16 @@ export default function Dashboard({initialPlace }: DashboardProps) {
 
     if (scenario.events && scenario.events.length > 0) {
       setEvents(scenario.events);
-      const mainEvent = scenario.events[0];
+      const mainEvent = scenario.events.reduce((best, item) =>
+        item.magnitude > best.magnitude ? item : best
+      );
       setSelectedEvent(mainEvent);
       setInspectedCoords(scenario.center);
       setActiveLocationLabel(scenario.name);
-      loadRisk(scenario.center);
+      setActiveTab("events");
+      setIsSidebarOpen(true);
+      setIsEventsLoading(false);
+      loadRisk({ lat: mainEvent.lat, lon: mainEvent.lon });
     }
   }, [loadEvents, loadStatus, loadRisk]);
 
