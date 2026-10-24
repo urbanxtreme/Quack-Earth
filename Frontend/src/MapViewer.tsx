@@ -1593,7 +1593,7 @@ export default function MapViewer({
 
         <div className="map-top-right">
           {/* Mainshock Selector Dropdown */}
-          <div className="mainshock-selector-group">
+          {/* <div className="mainshock-selector-group">
             <span className="scenario-label font-mono">MAINSHOCK:</span>
             <select
               className="mainshock-dropdown font-mono"
@@ -1626,7 +1626,7 @@ export default function MapViewer({
                 ✕ Clear
               </button>
             )}
-          </div>
+          </div> */}
 
           {/* Forecast Horizon Window Toggle */}
           {/* <div className="forecast-window-selector">
