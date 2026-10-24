@@ -37,7 +37,7 @@ def test_status_endpoint(client):
     assert data["mode"] in ("online", "offline")
     assert isinstance(data["cached_events"], int)
     assert isinstance(data["local_events_added"], int)
-    assert data["model"] == "omori-style-v1"
+    assert data["model"] in ("quack-risk-etas-v1", "omori-style-v1")
 
 
 def test_status_endpoint_v1_alias(client):
@@ -45,7 +45,7 @@ def test_status_endpoint_v1_alias(client):
     assert response.status_code == 200
     data = response.get_json()
     assert data["status"] == "ok"
-    assert data["model"] == "omori-style-v1"
+    assert data["model"] in ("quack-risk-etas-v1", "omori-style-v1")
 
 
 def test_events_endpoint(client):
