@@ -36,10 +36,12 @@ interface HeatmapStats {
   centerLon: number;
 }
 
-// Proxied through Vite dev server to guarantee 100% CORS & HTTP Range support on any local port
+// In development, use local Vite proxy. In production (hosted static site), use direct protomaps CDN.
 const getPmtilesUrl = () => {
   if (typeof window !== "undefined") {
-    return `${window.location.origin}/pmtiles-proxy/v4.pmtiles`;
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return `${window.location.origin}/pmtiles-proxy/v4.pmtiles`;
+    }
   }
   return "https://latest.protomaps.com/v4.pmtiles";
 };
