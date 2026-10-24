@@ -692,49 +692,46 @@ export default function MapViewer({
         data: geojson,
       });
 
-      // Neon purple / coral aura
+      // Neon soft aura beneath ring (zoom-responsive)
       map.addLayer({
         id: "aftershocks-glow",
         type: "circle",
         source: "aftershocks-source",
         paint: {
           "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["get", "mag"],
-            3.0, 9,
-            5.0, 15,
-            7.0, 22,
+            "interpolate", ["exponential", 2], ["zoom"],
+            2, ["interpolate", ["linear"], ["get", "mag"], 2.0, 4,  5.0, 8,  7.0, 12],
+            6, ["interpolate", ["linear"], ["get", "mag"], 2.0, 10, 5.0, 18, 7.0, 28],
+            10,["interpolate", ["linear"], ["get", "mag"], 2.0, 18, 5.0, 30, 7.0, 52],
           ],
           "circle-color": [
             "case",
             ["get", "is_simulated"],
-            "rgba(251, 146, 60, 0.35)",
-            "rgba(192, 132, 252, 0.35)",
+            "rgba(251, 146, 60, 0.50)",
+            "rgba(192, 132, 252, 0.50)",
           ],
-          "circle-blur": 0.5,
+          "circle-blur": 0.6,
         },
       });
 
-      // Distinct cyan/violet ring marker for observed, coral for simulated
+      // Main ring marker — zoom-responsive, clearly visible at world zoom
       map.addLayer({
         id: "aftershocks-rings",
         type: "circle",
         source: "aftershocks-source",
         paint: {
           "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["get", "mag"],
-            3.0, 6,
-            5.0, 11,
-            7.0, 17,
+            "interpolate", ["exponential", 2], ["zoom"],
+            2, ["interpolate", ["linear"], ["get", "mag"], 2.0, 3,  5.0, 6,  7.0, 10],
+            5, ["interpolate", ["linear"], ["get", "mag"], 2.0, 6,  5.0, 12, 7.0, 20],
+            8, ["interpolate", ["linear"], ["get", "mag"], 2.0, 10, 5.0, 18, 7.0, 30],
+            12,["interpolate", ["linear"], ["get", "mag"], 2.0, 16, 5.0, 28, 7.0, 50],
           ],
           "circle-color": [
             "case",
             ["get", "is_simulated"],
-            "rgba(251, 146, 60, 0.20)",
-            "rgba(192, 132, 252, 0.15)",
+            "rgba(251, 146, 60, 0.65)",
+            "rgba(192, 132, 252, 0.55)",
           ],
           "circle-stroke-width": 2.5,
           "circle-stroke-color": [
@@ -743,11 +740,11 @@ export default function MapViewer({
             "#fb923c",
             "#c084fc",
           ],
-          "circle-opacity": 0.9,
+          "circle-opacity": 1.0,
         },
       });
 
-      // Active expanding shockwave pulse for newly simulated aftershocks
+      // Active expanding shockwave pulse for newly arrived aftershocks
       map.addLayer({
         id: "aftershocks-active-wave",
         type: "circle",
@@ -755,18 +752,46 @@ export default function MapViewer({
         filter: ["==", ["get", "is_recent"], true],
         paint: {
           "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["get", "mag"],
-            3.0, 18,
-            5.0, 30,
-            7.0, 52,
+            "interpolate", ["exponential", 2], ["zoom"],
+            2, ["interpolate", ["linear"], ["get", "mag"], 2.0, 8,  5.0, 14, 7.0, 22],
+            6, ["interpolate", ["linear"], ["get", "mag"], 2.0, 20, 5.0, 38, 7.0, 65],
+            10,["interpolate", ["linear"], ["get", "mag"], 2.0, 40, 5.0, 75, 7.0, 120],
           ],
-          "circle-color": "rgba(251, 146, 60, 0.25)",
-          "circle-stroke-width": 3,
+          "circle-color": "rgba(251, 146, 60, 0.18)",
+          "circle-stroke-width": 2.5,
           "circle-stroke-color": "#fb923c",
           "circle-stroke-opacity": 0.95,
-          "circle-blur": 0.35,
+          "circle-blur": 0.3,
+        },
+      });
+
+      // Clear, readable magnitude label next to each aftershock
+      map.addLayer({
+        id: "aftershocks-labels",
+        type: "symbol",
+        source: "aftershocks-source",
+        layout: {
+          "text-field": ["concat", "M", ["to-string", ["get", "mag"]]],
+          "text-size": [
+            "interpolate", ["linear"], ["zoom"],
+            3, 9,
+            7, 11,
+            11, 13,
+          ],
+          "text-offset": [0, 1.25],
+          "text-anchor": "top",
+          "text-optional": true,
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": [
+            "case",
+            ["get", "is_simulated"],
+            "#fed7aa",
+            "#e9d5ff",
+          ],
+          "text-halo-color": "rgba(0, 0, 0, 0.9)",
+          "text-halo-width": 1.5,
         },
       });
 
@@ -800,6 +825,7 @@ export default function MapViewer({
 
       map.on("click", "aftershocks-rings", handleAftershockClick);
       map.on("click", "aftershocks-active-wave", handleAftershockClick);
+      map.on("click", "aftershocks-labels", handleAftershockClick);
 
       map.on("mouseenter", "aftershocks-rings", () => {
         map.getCanvas().style.cursor = "pointer";
@@ -811,6 +837,12 @@ export default function MapViewer({
         map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", "aftershocks-active-wave", () => {
+        map.getCanvas().style.cursor = "";
+      });
+      map.on("mouseenter", "aftershocks-labels", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "aftershocks-labels", () => {
         map.getCanvas().style.cursor = "";
       });
     }
@@ -1130,9 +1162,12 @@ export default function MapViewer({
 
       // Click on map to inspect coordinates or trigger risk evaluation
       map.on("click", (e) => {
-        const features = map.queryRenderedFeatures(e.point, {
-          layers: ["events-circles", "aftershocks-rings", "faults-lines", "risk-grid-cells"],
-        });
+        // Guard: only query layers that exist in the current style
+        const layersToQuery = ["events-circles", "aftershocks-rings", "faults-lines", "risk-grid-cells"]
+          .filter((id) => !!map.getLayer(id));
+        const features = layersToQuery.length > 0
+          ? map.queryRenderedFeatures(e.point, { layers: layersToQuery })
+          : [];
         if (features && features.length > 0) return;
 
         const coords = { lat: e.lngLat.lat, lon: e.lngLat.lng };
@@ -1173,6 +1208,7 @@ export default function MapViewer({
       });
 
       mapRef.current = map;
+      (window as any).__quackMap = map;
 
       const handleResize = () => {
         if (mapRef.current) {
@@ -1333,15 +1369,34 @@ export default function MapViewer({
     if (selectedMainshock && mapRef.current) {
       mapRef.current.flyTo({
         center: [selectedMainshock.lon, selectedMainshock.lat],
-        zoom: 7.2,
-        speed: 1.4,
-        curve: 1.2,
+        zoom: 7.5,
+        speed: 1.2,
+        curve: 1.3,
         essential: true,
       });
       setTimelinePercent(0);
       setIsPlayingTimeline(true);
     }
   }, [selectedMainshock]);
+
+  // Auto-zoom when simulation data arrives (effectiveMainshock auto-picked, not manually selected)
+  const prevSimDataIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!simulationData) return;
+    const simMainId = simulationData.mainshock?.id;
+    if (!simMainId || simMainId === prevSimDataIdRef.current) return;
+    prevSimDataIdRef.current = simMainId;
+    // Only auto-zoom if user hasn't already manually selected (selectedMainshock handles its own fly-to)
+    if (!selectedMainshock && mapRef.current) {
+      mapRef.current.flyTo({
+        center: [simulationData.mainshock.lon, simulationData.mainshock.lat],
+        zoom: 7.2,
+        speed: 1.2,
+        curve: 1.3,
+        essential: true,
+      });
+    }
+  }, [simulationData, selectedMainshock]);
 
   // Sync selected event camera fly-to
   useEffect(() => {
