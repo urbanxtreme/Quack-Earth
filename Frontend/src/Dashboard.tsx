@@ -22,7 +22,7 @@ interface DashboardProps {
 
 export type ActiveTab = "map" | "events" | "risk" | "report" | "status";
 
-export default function Dashboard({ onBackToLanding, initialPlace }: DashboardProps) {
+export default function Dashboard({initialPlace }: DashboardProps) {
   // Navigation & UI state
   const [activeTab, setActiveTab] = useState<ActiveTab>("events");
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
@@ -151,16 +151,7 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
       {/* Top Header Bar */}
       <header className="dashboard-header">
         <div className="header-brand-section">
-          {onBackToLanding && (
-            <button
-              type="button"
-              className="btn-glass-icon"
-              onClick={onBackToLanding}
-              title="Return to welcome screen"
-            >
-              ←
-            </button>
-          )}
+          
           <div className="brand-title-group">
             <div className="brand-logo-icon">🌍</div>
             <div>
@@ -192,13 +183,10 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
 
         {/* Global Live Stat Badges */}
         <div className="header-metrics">
-          <div className="metric-badge">
-            <span className="metric-label">Active Events:</span>
-            <span className="metric-value font-mono text-cyan">{events.length}</span>
-          </div>
+
 
           {maxMagnitude > 0 && (
-            <div className="metric-badge">
+            <div className="btn-sitrep-header">
               <span className="metric-label">Peak:</span>
               <span className="metric-value font-mono text-orange">M {maxMagnitude.toFixed(1)}</span>
             </div>
