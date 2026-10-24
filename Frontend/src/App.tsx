@@ -3,7 +3,7 @@ import Dashboard from "./Dashboard";
 
 export default function App() {
   const [showDashboard, setShowDashboard] = useState<boolean>(true);
-  const [placeQuery, setPlaceQuery] = useState<string>("Tokyo");
+  const [placeQuery, setPlaceQuery] = useState<string>("");
 
   const handleOpenMap = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -32,7 +32,7 @@ export default function App() {
                 <input
                   type="text"
                   className="landing-input"
-                  placeholder="Enter place name (e.g. Tokyo, San Francisco, Nepal)..."
+                  placeholder="Enter place name (e.g. Turkey, San Francisco, Nepal)..."
                   value={placeQuery}
                   onChange={(e) => setPlaceQuery(e.target.value)}
                   id="landing-place-input"
@@ -41,7 +41,7 @@ export default function App() {
 
               <div className="landing-quick-tags">
                 <span className="quick-label">Suggestions:</span>
-                {["Tokyo", "San Francisco", "Chile", "Nepal", "Turkey", "Kochi"].map((place) => (
+                {["Turkey", "San Francisco", "Chile", "Nepal", "Kochi"].map((place) => (
                   <button
                     key={place}
                     type="button"

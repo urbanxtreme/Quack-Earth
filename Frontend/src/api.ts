@@ -168,7 +168,7 @@ export async function calculateRisk(params: {
   lat?: number;
   lon?: number;
   radius_km?: number;
-  time_window?: '24h' | '7d';
+  time_window?: '24h' | '72h' | '7d';
   min_magnitude?: number;
 }): Promise<RiskResponse> {
   const query = new URLSearchParams();

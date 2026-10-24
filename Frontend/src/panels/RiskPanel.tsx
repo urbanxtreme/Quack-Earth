@@ -1,15 +1,32 @@
 import { useState } from "react";
-import type { RiskResponse } from "../api";
+import type { RiskResponse, EarthquakeEvent } from "../api";
 
 interface RiskPanelProps {
   riskData: RiskResponse | null;
   isLoading: boolean;
   activeLocationName?: string;
   selectedCoordinates: { lat: number; lon: number } | null;
-  timeWindow: "24h" | "7d";
-  setTimeWindow: (tw: "24h" | "7d") => void;
+  timeWindow: "24h" | "72h" | "7d";
+  setTimeWindow: (tw: "24h" | "72h" | "7d") => void;
   onRecalculate: () => void;
   onOpenSitRep?: () => void;
+  selectedMainshock?: EarthquakeEvent | null;
+  sequenceDetails?: {
+    confidence?: string;
+    foreshock_count?: number;
+    aftershock_count?: number;
+    search_radius_km?: number;
+    omori_fit?: {
+      k?: number;
+      c_days?: number;
+      p?: number;
+      method?: string;
+    };
+    geometry?: {
+      strike_deg?: number;
+    };
+  } | null;
+  isSeqLoading?: boolean;
 }
 
 export default function RiskPanel({
@@ -21,6 +38,9 @@ export default function RiskPanel({
   setTimeWindow,
   onRecalculate,
   onOpenSitRep,
+  selectedMainshock,
+  sequenceDetails,
+  isSeqLoading,
 }: RiskPanelProps) {
   const [radiusKm, setRadiusKm] = useState<number>(50);
 

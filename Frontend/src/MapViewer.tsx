@@ -529,11 +529,9 @@ export default function MapViewer({
         setMapLoaded(true);
         map.resize();
 
-        // Initial single heatmap center
+        // Initial single heatmap center if specified
         if (initialPlace) {
           handleGenerateHeatmap(initialPlace);
-        } else {
-          handleGenerateHeatmap("Tokyo");
         }
 
         // Render events
@@ -763,7 +761,7 @@ export default function MapViewer({
     }
   };
 
-  const presetPlaces = ["Tokyo", "San Francisco", "Kochi", "Chile", "Nepal", "Turkey"];
+  const presetPlaces = ["Turkey", "San Francisco", "Kochi", "Chile", "Nepal"];
 
   return (
     <div className="map-view-container">
@@ -790,7 +788,7 @@ export default function MapViewer({
               <input
                 type="text"
                 className="search-input"
-                placeholder="Enter place name (e.g. Tokyo, San Francisco, Kochi)..."
+                placeholder="Enter place name (e.g. Turkey, San Francisco, Kochi)..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 disabled={isSearching}

@@ -38,12 +38,9 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
   // Filter & coordinate states
   const [timeWindowHours, setTimeWindowHours] = useState<number>(72);
   const [minMagnitude, setMinMagnitude] = useState<number>(3.0);
-  const [riskTimeWindow, setRiskTimeWindow] = useState<"24h" | "7d">("24h");
-  const [inspectedCoords, setInspectedCoords] = useState<{ lat: number; lon: number } | null>({
-    lat: 35.6762,
-    lon: 139.6503,
-  });
-  const [activeLocationLabel, setActiveLocationLabel] = useState<string>("Tokyo, Japan");
+  const [riskTimeWindow, setRiskTimeWindow] = useState<"24h" | "72h" | "7d">("24h");
+  const [inspectedCoords, setInspectedCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [activeLocationLabel, setActiveLocationLabel] = useState<string>("Global USGS Real-Time Feed");
 
   // Loading states
   const [isEventsLoading, setIsEventsLoading] = useState<boolean>(false);
@@ -78,7 +75,8 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
 
   // Recalculate risk for currently inspected coordinates
   const loadRisk = useCallback(async (coords?: { lat: number; lon: number }) => {
-    const target = coords || inspectedCoords || { lat: 35.6762, lon: 139.6503 };
+    const target = coords || inspectedCoords;
+    if (!target) return;
     setIsRiskLoading(true);
     try {
       const res = await calculateRisk({
@@ -104,9 +102,10 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
     if (scenario.id === "live_usgs") {
       loadEvents();
       loadStatus();
-      loadRisk({ lat: 35.6762, lon: 139.6503 });
-      setInspectedCoords({ lat: 35.6762, lon: 139.6503 });
-      setActiveLocationLabel("Tokyo, Japan (USGS Global)");
+      setInspectedCoords(null);
+      setActiveLocationLabel("Global USGS Real-Time Feed");
+      setSelectedEvent(null);
+      setRiskData(null);
       return;
     }
 
@@ -124,8 +123,7 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
   useEffect(() => {
     loadStatus();
     loadEvents();
-    loadRisk();
-  }, [loadStatus, loadEvents, loadRisk]);
+  }, [loadStatus, loadEvents]);
 
   // Handle selecting an event from list
   const handleSelectEvent = (event: EarthquakeEvent) => {
@@ -373,12 +371,13 @@ export default function Dashboard({ onBackToLanding, initialPlace }: DashboardPr
                   setTimeWindow={setRiskTimeWindow}
                   onRecalculate={() => loadRisk()}
                   onOpenSitRep={() => setIsSitRepOpen(true)}
+                  selectedMainshock={selectedEvent}
                 />
               )}
 
               {activeTab === "report" && (
                 <ReportEventPanel
-                  currentMapCenter={inspectedCoords || { lat: 35.6762, lon: 139.6503 }}
+                  currentMapCenter={inspectedCoords || { lat: 20.0, lon: 0.0 }}
                   onEventSubmitted={() => {
                     loadEvents();
                     loadStatus();

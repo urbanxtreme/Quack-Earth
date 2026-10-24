@@ -111,7 +111,7 @@ export default function ReportEventPanel({
               type="number"
               step="any"
               className="glass-input font-mono"
-              placeholder="e.g. 35.6762"
+              placeholder="e.g. 37.1740"
               value={lat}
               onChange={(e) => setLat(e.target.value)}
               required
@@ -127,7 +127,7 @@ export default function ReportEventPanel({
               type="number"
               step="any"
               className="glass-input font-mono"
-              placeholder="e.g. 139.6503"
+              placeholder="e.g. 37.0320"
               value={lon}
               onChange={(e) => setLon(e.target.value)}
               required
